@@ -646,7 +646,8 @@
     .history-panel,
     .chat-panel,
     .action-panel,
-    .seating-panel {
+    .seating-panel,
+    .online-panel {
       display: none;
       min-height: 160px;
       padding: 12px;
@@ -658,7 +659,8 @@
     .history-panel.visible,
     .chat-panel.visible,
     .action-panel.visible,
-    .seating-panel.visible {
+    .seating-panel.visible,
+    .online-panel.visible {
       display: grid;
       gap: 10px;
       align-content: start;
@@ -841,6 +843,50 @@
       background: #20232a;
       color: var(--text);
       font: inherit;
+    }
+
+    .online-form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .online-form label {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .online-form input {
+      min-height: 38px;
+      width: 100%;
+      padding: 0 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: #20232a;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .online-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .online-actions button {
+      min-height: 34px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .online-status {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.35;
     }
 
     .seat {
@@ -1207,6 +1253,7 @@
         Blinds 10 / 20
         <div class="table-tools">
           <button class="tool-button" id="seats-toggle" type="button">Seats</button>
+          <button class="tool-button" id="online-toggle" type="button">Online</button>
           <button class="tool-button" id="history-toggle" type="button">History</button>
           <button class="tool-button" id="chat-toggle" type="button">Chat</button>
           <button class="tool-button" id="step-mode-toggle" type="button">Step Bots: Off</button>
@@ -1690,6 +1737,25 @@
           <button id="remove-bot-seat" type="button">Remove Bot</button>
         </div>
       </div>
+      <div class="online-panel" id="online-panel">
+        <h2 class="panel-title">Online Room</h2>
+        <div class="online-status" id="online-status">Firebase is not configured yet. Local play is still active.</div>
+        <form class="online-form" id="online-form">
+          <label for="online-name">
+            Display name
+            <input id="online-name" type="text" maxlength="24" placeholder="Your name">
+          </label>
+          <label for="online-room-code">
+            Room code
+            <input id="online-room-code" type="text" maxlength="6" placeholder="ABCD">
+          </label>
+          <div class="online-actions">
+            <button id="create-room" type="button" disabled>Create Room</button>
+            <button id="join-room" type="button" disabled>Join Room</button>
+            <button id="leave-room" type="button" disabled>Leave</button>
+          </div>
+        </form>
+      </div>
       <div class="action-panel visible" id="action-panel">
         <h2 class="panel-title">Action Log</h2>
         <div class="action-log" id="action-log">
@@ -1714,7 +1780,18 @@
       </div>
     </section>
   </main>
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      doc,
+      getDoc,
+      getFirestore,
+      onSnapshot,
+      serverTimestamp,
+      setDoc,
+      updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
     const seats = Array.from(document.querySelectorAll(".seat"));
     const repeatFlash = document.querySelector("#repeat-flash");
     const dealerButton = document.querySelector("#dealer-button");
@@ -1880,6 +1957,7 @@
     const blackjackBet = document.querySelector("#blackjack-bet");
     const blackjackFold = document.querySelector("#blackjack-fold");
     const seatsToggle = document.querySelector("#seats-toggle");
+    const onlineToggle = document.querySelector("#online-toggle");
     const stepModeToggle = document.querySelector("#step-mode-toggle");
     const nextActionButton = document.querySelector("#next-action");
     const endB52Test = document.querySelector("#end-b52-test");
@@ -1892,12 +1970,30 @@
     const actionLog = document.querySelector("#action-log");
     const historyToggle = document.querySelector("#history-toggle");
     const chatToggle = document.querySelector("#chat-toggle");
+    const onlinePanel = document.querySelector("#online-panel");
+    const onlineStatus = document.querySelector("#online-status");
+    const onlineName = document.querySelector("#online-name");
+    const onlineRoomCode = document.querySelector("#online-room-code");
+    const createRoomButton = document.querySelector("#create-room");
+    const joinRoomButton = document.querySelector("#join-room");
+    const leaveRoomButton = document.querySelector("#leave-room");
     const historyPanel = document.querySelector("#history-panel");
     const chatPanel = document.querySelector("#chat-panel");
     const historyList = document.querySelector("#history-list");
     const chatLog = document.querySelector("#chat-log");
     const chatForm = document.querySelector("#chat-form");
     const chatInput = document.querySelector("#chat-input");
+    const firebaseConfig = {
+      apiKey: "AIzaSyBy4nToktKKJB3f2kMk6dBFV8O1JbqB1l4",
+      authDomain: "riverforge-poker.firebaseapp.com",
+      projectId: "riverforge-poker",
+      storageBucket: "riverforge-poker.firebasestorage.app",
+      messagingSenderId: "520846439402",
+      appId: "1:520846439402:web:85919da749684070c1b893",
+      measurementId: "G-ZCGM8MET15"
+    };
+    const onlinePlayerIdKey = "riverforge.onlinePlayerId";
+    const onlineNameKey = "riverforge.onlineName";
     const gameRules = {
       "7/27 Black": {
         name: "7/27 Black",
@@ -2328,6 +2424,15 @@
         ? { type: index === userSeatIndex ? "user" : "bot", name: index === userSeatIndex ? "You" : `Seat ${index + 1}` }
         : null
     ));
+    const firebaseApp = initializeApp(firebaseConfig);
+    const firestoreDb = getFirestore(firebaseApp);
+    const onlineRoom = {
+      code: null,
+      isHost: false,
+      playerId: null,
+      unsubscribe: null,
+      applyingRemote: false
+    };
 
     function loadFavoriteGames() {
       try {
@@ -2344,6 +2449,312 @@
       } catch {
         // Favorites are a convenience only; the game still works if storage is blocked.
       }
+    }
+
+    function getOnlinePlayerId() {
+      const existingId = localStorage.getItem(onlinePlayerIdKey);
+      if (existingId) {
+        return existingId;
+      }
+
+      const newId = `p_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+      localStorage.setItem(onlinePlayerIdKey, newId);
+      return newId;
+    }
+
+    function hasFirebaseConfig() {
+      return Boolean(
+        firebaseConfig.apiKey
+        && firebaseConfig.authDomain
+        && firebaseConfig.projectId
+        && firebaseConfig.appId
+      );
+    }
+
+    function makeRoomCode() {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      return Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+    }
+
+    function updateOnlineControls() {
+      const configured = hasFirebaseConfig();
+      const inRoom = Boolean(onlineRoom.code);
+      createRoomButton.disabled = !configured || inRoom;
+      joinRoomButton.disabled = !configured || inRoom;
+      leaveRoomButton.disabled = !configured || !inRoom;
+      addBotSeatButton.disabled = handState || (inRoom && !onlineRoom.isHost);
+      removeBotSeatButton.disabled = handState || (inRoom && !onlineRoom.isHost);
+      onlineStatus.textContent = inRoom
+        ? `${onlineRoom.isHost ? "Hosting" : "Joined"} room ${onlineRoom.code}. Pick an open or bot seat.`
+        : configured
+        ? "Firebase is connected. Create or join a room, then pick a seat."
+        : "Firebase is not configured yet. Local play is still active.";
+    }
+
+    function onlineDisplayName() {
+      return onlineName.value.trim() || "Player";
+    }
+
+    function roomRef(code = onlineRoom.code) {
+      return doc(firestoreDb, "rooms", code);
+    }
+
+    function serializeSeatsForRoom() {
+      return occupiedSeats.map((seat) => {
+        if (!seat) return null;
+        if (seat.type === "bot") {
+          return { type: "bot", name: seat.name };
+        }
+        if (seat.type === "user" || seat.type === "remote") {
+          return {
+            type: "human",
+            name: seat.name,
+            playerId: seat.playerId || onlineRoom.playerId || getOnlinePlayerId()
+          };
+        }
+        return null;
+      });
+    }
+
+    function applyRoomData(data) {
+      if (!data?.seats) return;
+      onlineRoom.applyingRemote = true;
+      const playerId = onlineRoom.playerId || getOnlinePlayerId();
+      occupiedSeats = data.seats.map((seat) => {
+        if (!seat) return null;
+        if (seat.type === "bot") {
+          return { type: "bot", name: seat.name };
+        }
+        if (seat.type === "human") {
+          return {
+            type: seat.playerId === playerId ? "user" : "remote",
+            name: seat.name || "Player",
+            playerId: seat.playerId
+          };
+        }
+        return null;
+      });
+      const foundUserSeat = occupiedSeats.findIndex((seat) => seat?.type === "user");
+      if (foundUserSeat >= 0) {
+        userSeatIndex = foundUserSeat;
+      }
+      dealerIndex = Number.isInteger(data.dealerIndex) ? data.dealerIndex : dealerIndex;
+      if (Array.isArray(data.stacks) && data.stacks.length === seats.length) {
+        stacks = data.stacks;
+      }
+      renderSeating();
+      updateStacks();
+      onlineRoom.applyingRemote = false;
+    }
+
+    function subscribeToRoom(code) {
+      onlineRoom.unsubscribe?.();
+      onlineRoom.unsubscribe = onSnapshot(roomRef(code), (snapshot) => {
+        if (!snapshot.exists()) {
+          onlineStatus.textContent = "That room no longer exists.";
+          return;
+        }
+        const data = snapshot.data();
+        applyRoomData(data);
+        if (onlineRoom.isHost) {
+          applyOnlineAction(data.pendingAction);
+        } else {
+          applyGameSnapshot(data.game);
+        }
+        updateOnlineControls();
+      });
+    }
+
+    async function writeRoomSeats() {
+      if (!onlineRoom.code || onlineRoom.applyingRemote) return;
+      await updateDoc(roomRef(), {
+        seats: serializeSeatsForRoom(),
+        stacks,
+        dealerIndex,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    async function sendOnlineAction(type, payload = {}) {
+      if (!isOnlineNonHost()) {
+        return false;
+      }
+      if (!handState || activeIndex !== userSeatIndex) {
+        return true;
+      }
+      await updateDoc(roomRef(), {
+        pendingAction: {
+          id: `${onlineRoom.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          playerId: onlineRoom.playerId,
+          seatIndex: userSeatIndex,
+          type,
+          payload,
+          createdAt: Date.now()
+        },
+        updatedAt: serverTimestamp()
+      });
+      setTableMessage("Action sent.", "Waiting for the host to apply it.");
+      hideActionPanels();
+      return true;
+    }
+
+    async function applyOnlineAction(action) {
+      if (!onlineRoom.isHost || !action || action.id === onlineRoom.lastActionId) {
+        return;
+      }
+      onlineRoom.lastActionId = action.id;
+      const { seatIndex, type, payload = {} } = action;
+      const seat = occupiedSeats[seatIndex];
+      if (!handState || !seat || seat.playerId !== action.playerId || activeIndex !== seatIndex) {
+        await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
+        return;
+      }
+
+      if (handState.phase === "betting") {
+        if (type === "call" || type === "check") {
+          payToCall(seatIndex);
+          advanceAfterAction();
+        } else if (type === "raise" || type === "bet") {
+          if (!raisePlayer(seatIndex, payload.unit ?? null)) {
+            payToCall(seatIndex);
+          }
+          advanceAfterAction();
+        } else if (type === "fold") {
+          foldPlayer(seatIndex);
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "drawing") {
+        if (type === "hit") {
+          await computerHit(seatIndex);
+        } else if (type === "stay") {
+          stayPlayer(seatIndex);
+          advanceAfterAction();
+        }
+      }
+
+      await updateDoc(roomRef(), {
+        pendingAction: null,
+        game: currentGameSnapshot(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    function restoreLocalTable() {
+      occupiedSeats = seats.map((_, index) => (
+        index >= 2 && index <= 6
+          ? { type: index === 4 ? "user" : "bot", name: index === 4 ? "You" : `Seat ${index + 1}` }
+          : null
+      ));
+      userSeatIndex = 4;
+      dealerIndex = 4;
+      renderSeating();
+      updateStacks();
+    }
+
+    function serializeForFirestore(value) {
+      if (value instanceof Set) {
+        return { __riverforgeSet: [...value] };
+      }
+      if (Array.isArray(value)) {
+        return value.map(serializeForFirestore);
+      }
+      if (value && typeof value === "object") {
+        return Object.fromEntries(
+          Object.entries(value)
+            .filter(([key, entryValue]) => key !== "rules" && entryValue !== undefined)
+            .map(([key, entryValue]) => [key, serializeForFirestore(entryValue)])
+        );
+      }
+      if (typeof value === "number" && !Number.isFinite(value)) {
+        return "__Infinity";
+      }
+      return value;
+    }
+
+    function deserializeFromFirestore(value) {
+      if (Array.isArray(value)) {
+        return value.map(deserializeFromFirestore);
+      }
+      if (value && typeof value === "object") {
+        if (Array.isArray(value.__riverforgeSet)) {
+          return new Set(value.__riverforgeSet);
+        }
+        return Object.fromEntries(
+          Object.entries(value).map(([key, entryValue]) => [key, deserializeFromFirestore(entryValue)])
+        );
+      }
+      if (value === "__Infinity") {
+        return Infinity;
+      }
+      return value;
+    }
+
+    function serializeHandState() {
+      if (!handState) return null;
+      return {
+        ...serializeForFirestore(handState),
+        rulesName: handState.rules?.name || null
+      };
+    }
+
+    function deserializeHandState(value) {
+      if (!value) return null;
+      const restored = deserializeFromFirestore(value);
+      restored.rules = gameRules[restored.rulesName] || gameRules[gameChoice.value];
+      return restored;
+    }
+
+    function currentGameSnapshot() {
+      return {
+        pot,
+        dealerIndex,
+        activeIndex,
+        handNumber,
+        stacks,
+        handState: serializeHandState(),
+        currentGameText: currentGame.textContent,
+        dealerOptionsText: dealerOptionsLine.textContent,
+        roundInfoHtml: roundInfo.innerHTML
+      };
+    }
+
+    let hostSyncTimer = null;
+    function scheduleHostGameSync() {
+      if (!onlineRoom.code || !onlineRoom.isHost || onlineRoom.applyingRemote) return;
+      clearTimeout(hostSyncTimer);
+      hostSyncTimer = setTimeout(async () => {
+        await updateDoc(roomRef(), {
+          game: currentGameSnapshot(),
+          updatedAt: serverTimestamp()
+        });
+      }, 180);
+    }
+
+    function applyGameSnapshot(game) {
+      if (!game || onlineRoom.isHost) return;
+      onlineRoom.applyingRemote = true;
+      pot = game.pot || 0;
+      dealerIndex = Number.isInteger(game.dealerIndex) ? game.dealerIndex : dealerIndex;
+      activeIndex = Number.isInteger(game.activeIndex) ? game.activeIndex : null;
+      handNumber = Number.isInteger(game.handNumber) ? game.handNumber : handNumber;
+      if (Array.isArray(game.stacks) && game.stacks.length === seats.length) {
+        stacks = game.stacks;
+      }
+      handState = deserializeHandState(game.handState);
+      currentGame.textContent = game.currentGameText || currentGame.textContent;
+      dealerOptionsLine.textContent = game.dealerOptionsText || "";
+      roundInfo.innerHTML = game.roundInfoHtml || roundInfo.innerHTML;
+      updatePot();
+      renderSeating();
+      renderAllHands();
+      renderCommunityCards();
+      refreshPointBadges();
+      if (handState && activeIndex === userSeatIndex) {
+        showPlayerControls();
+      } else {
+        hideActionPanels();
+      }
+      onlineRoom.applyingRemote = false;
     }
 
     function renderGameChoices(preferredGame = gameChoice.value || gameNames[0]) {
@@ -2438,6 +2849,14 @@
       return occupiedSeats[index]?.type === "user";
     }
 
+    function isRemoteSeat(index) {
+      return occupiedSeats[index]?.type === "remote";
+    }
+
+    function isOnlineNonHost() {
+      return Boolean(onlineRoom.code && !onlineRoom.isHost);
+    }
+
     function nextOccupiedIndex(fromIndex) {
       const occupied = occupiedIndexes();
       if (occupied.length === 0) {
@@ -2481,7 +2900,7 @@
           ? `${index + 1}: ${occupant.name}`
           : `${index + 1}: Open`;
         button.classList.toggle("current-seat", occupant?.type === "user");
-        button.classList.toggle("empty-seat-choice", !occupant);
+        button.classList.toggle("empty-seat-choice", !occupant || (onlineRoom.code && occupant?.type === "bot"));
         button.addEventListener("click", () => takeSeat(index));
         seatPicker.appendChild(button);
       });
@@ -2490,6 +2909,10 @@
     }
 
     function takeSeat(index) {
+      if (onlineRoom.code) {
+        takeOnlineSeat(index);
+        return;
+      }
       if (handState || occupiedSeats[index]?.type === "bot") {
         return;
       }
@@ -2504,6 +2927,32 @@
       renderSeating();
     }
 
+    async function takeOnlineSeat(index) {
+      if (!onlineRoom.code || handState) {
+        return;
+      }
+      const occupant = occupiedSeats[index];
+      if (occupant && occupant.type !== "bot") {
+        return;
+      }
+
+      const previousUserSeat = occupiedSeats.findIndex((seat) => seat?.type === "user");
+      if (previousUserSeat >= 0) {
+        occupiedSeats[previousUserSeat] = null;
+      }
+      occupiedSeats[index] = {
+        type: "user",
+        name: onlineDisplayName(),
+        playerId: onlineRoom.playerId
+      };
+      userSeatIndex = index;
+      if (dealerIndex === previousUserSeat || !isOccupied(dealerIndex)) {
+        dealerIndex = index;
+      }
+      renderSeating();
+      await writeRoomSeats();
+    }
+
     function randomOpenSeat() {
       const openSeats = seats.map((_, index) => index).filter((index) => !occupiedSeats[index]);
       if (openSeats.length === 0 || handState) {
@@ -2515,7 +2964,7 @@
 
     function addBotSeat() {
       const openSeats = seats.map((_, index) => index).filter((index) => !occupiedSeats[index]);
-      if (openSeats.length === 0 || handState) {
+      if (openSeats.length === 0 || handState || (onlineRoom.code && !onlineRoom.isHost)) {
         return;
       }
 
@@ -2523,10 +2972,11 @@
       occupiedSeats[index] = { type: "bot", name: `Seat ${index + 1}` };
       stacks[index] = 2000;
       renderSeating();
+      writeRoomSeats();
     }
 
     function removeBotSeat() {
-      if (handState) {
+      if (handState || (onlineRoom.code && !onlineRoom.isHost)) {
         return;
       }
 
@@ -2539,6 +2989,7 @@
 
       occupiedSeats[botIndex] = null;
       renderSeating();
+      writeRoomSeats();
     }
 
     function updateDealer(keepShowdownVisible = false) {
@@ -2555,6 +3006,12 @@
       dealerPanel.classList.remove("hidden");
       currentGame.textContent = `${seatName(dealerIndex)} is dealer. Choose this hand's game.`;
       dealerOptionsLine.textContent = "";
+
+      if (onlineRoom.code && !onlineRoom.isHost) {
+        dealerPanel.classList.add("hidden");
+        setTableMessage("Online room joined.", `Waiting for ${seatName(dealerIndex)} or the host to act.`);
+        return;
+      }
 
       if (!isUserSeat(dealerIndex)) {
         const nextGame = gameNames[Math.floor(Math.random() * gameNames.length)];
@@ -2598,6 +3055,7 @@
 
     function updatePot() {
       potDisplay.textContent = `Pot: ${pot}`;
+      scheduleHostGameSync();
     }
 
     function betList(inputs) {
@@ -2693,6 +3151,7 @@
         ${secondary ? `<span>${secondary}</span>` : ""}
         ${contextLines.map((line) => `<span class="table-context">${line}</span>`).join("")}
       `;
+      scheduleHostGameSync();
     }
 
     function simpleCardText(card) {
@@ -2917,6 +3376,7 @@
         renderSeatHand(index);
       }
       addActionLog(`${label} action on ${seatName(index)}.`, true);
+      scheduleHostGameSync();
     }
 
     function updateRulesPreview() {
@@ -3634,7 +4094,7 @@
 
       const cardEntries = handState.hands[seatIndex]
         .map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }))
-        .filter((entry) => !isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
+        .filter((entry) => handState.phase === "rolling" || !isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
       const orderedCards = handState.phase === "rolling"
         ? cardEntries
         : [
@@ -3734,6 +4194,7 @@
 
     function renderAllHands() {
       occupiedIndexes().forEach(renderSeatHand);
+      scheduleHostGameSync();
     }
 
     function selectRollCard(cardIndex) {
@@ -7997,6 +8458,12 @@
         return;
       }
 
+      if (isRemoteSeat(activeIndex)) {
+        setTableMessage("Waiting for player.", `${seatName(activeIndex)} is choosing an action.`);
+        scheduleHostGameSync();
+        return;
+      }
+
       if (handState.phase === "betting") {
         computerBet(activeIndex);
       } else if (handState.phase === "inbetweenAce" || handState.phase === "inbetweenAction") {
@@ -8113,6 +8580,11 @@
     }
 
     async function dealPlayerCards() {
+      if (isOnlineNonHost()) {
+        setTableMessage("Waiting for host.", "Only the host browser deals and advances the shared deck.");
+        return;
+      }
+
       const rules = gameRules[gameChoice.value];
       if (rules.kind === "christmasTree") {
         rules.cardsPerPlayer = rules.omaha ? 4 : Number(treeCardCountChoice.value);
@@ -8263,7 +8735,9 @@
         setCurrentGameDisplay(rules.name, handState.dealerOptions || currentDealerOptionsText(rules));
         renderAllHands();
         refreshPointBadges();
-        await discardZeroUpCardsAfterReveal();
+        if (!rules.rollYourOwn) {
+          await discardZeroUpCardsAfterReveal();
+        }
 
         if (rules.kind === "littlePig") {
           renderCommunityCards();
@@ -8347,6 +8821,7 @@
         } else {
           startInitialBettingRound("Opening deal complete");
         }
+        scheduleHostGameSync();
       } else {
         handState = null;
         setSeatingLocked(false);
@@ -8361,10 +8836,11 @@
       updateDealer();
     });
 
-    callButton.addEventListener("click", () => {
+    callButton.addEventListener("click", async () => {
       if (!handState || handState.phase !== "betting") {
         return;
       }
+      if (await sendOnlineAction("call")) return;
 
       if (!payToCall(activeIndex)) {
         setTableMessage("Not enough chips.", "You cannot call this bet with your current stack.");
@@ -8374,10 +8850,11 @@
       advanceAfterAction();
     });
 
-    raiseButton.addEventListener("click", () => {
+    raiseButton.addEventListener("click", async () => {
       if (!handState || handState.phase !== "betting") {
         return;
       }
+      if (await sendOnlineAction("raise", { unit: ["mariah", "followQueen", "night"].includes(handState.rules.kind) ? 1 : null })) return;
 
       if (!raisePlayer(activeIndex, ["mariah", "followQueen", "night"].includes(handState.rules.kind) ? 1 : null)) {
         setTableMessage("Not enough chips.", "You cannot raise with your current stack.");
@@ -8387,10 +8864,11 @@
       advanceAfterAction();
     });
 
-    studBetTwoButton.addEventListener("click", () => {
+    studBetTwoButton.addEventListener("click", async () => {
       if (!handState || handState.phase !== "betting") {
         return;
       }
+      if (await sendOnlineAction("raise", { unit: 2 })) return;
 
       if (!raisePlayer(activeIndex, 2)) {
         setTableMessage("Not enough chips.", "You cannot bet 2 with your current stack.");
@@ -8400,19 +8878,21 @@
       advanceAfterAction();
     });
 
-    foldButton.addEventListener("click", () => {
+    foldButton.addEventListener("click", async () => {
       if (!handState || handState.phase !== "betting") {
         return;
       }
+      if (await sendOnlineAction("fold")) return;
 
       foldPlayer(activeIndex);
       advanceAfterAction();
     });
 
-    hitButton.addEventListener("click", () => {
+    hitButton.addEventListener("click", async () => {
       if (!handState || !["drawing", "blackjackPlay"].includes(handState.phase)) {
         return;
       }
+      if (await sendOnlineAction("hit")) return;
 
       if (handState.phase === "blackjackPlay") {
         blackjackPlayerHit(activeIndex);
@@ -8421,10 +8901,11 @@
       }
     });
 
-    stayButton.addEventListener("click", () => {
+    stayButton.addEventListener("click", async () => {
       if (!handState || !["drawing", "blackjackPlay"].includes(handState.phase)) {
         return;
       }
+      if (await sendOnlineAction("stay")) return;
 
       if (handState.phase === "blackjackPlay") {
         resolveBlackjackHand(true, `${seatName(activeIndex)} stayed`);
@@ -8567,6 +9048,10 @@
       seatingPanel.classList.toggle("visible");
     });
 
+    onlineToggle.addEventListener("click", () => {
+      onlinePanel.classList.toggle("visible");
+    });
+
     stepModeToggle.addEventListener("click", () => {
       stepMode = !stepMode;
       if (!stepMode) {
@@ -8591,6 +9076,79 @@
     randomSeatButton.addEventListener("click", randomOpenSeat);
     addBotSeatButton.addEventListener("click", addBotSeat);
     removeBotSeatButton.addEventListener("click", removeBotSeat);
+
+    onlineName.value = localStorage.getItem(onlineNameKey) || "";
+    onlineRoom.playerId = getOnlinePlayerId();
+    onlineName.addEventListener("input", () => {
+      localStorage.setItem(onlineNameKey, onlineName.value.trim());
+      const currentSeat = occupiedSeats.findIndex((seat) => seat?.type === "user");
+      if (currentSeat >= 0) {
+        occupiedSeats[currentSeat].name = onlineDisplayName();
+        renderSeating();
+        writeRoomSeats();
+      }
+    });
+    createRoomButton.addEventListener("click", async () => {
+      const code = makeRoomCode();
+      onlineRoomCode.value = code;
+      onlineRoom.code = code;
+      onlineRoom.isHost = true;
+      const currentSeat = occupiedSeats.findIndex((seat) => seat?.type === "user");
+      if (currentSeat >= 0) {
+        occupiedSeats[currentSeat] = {
+          type: "user",
+          name: onlineDisplayName(),
+          playerId: onlineRoom.playerId
+        };
+      }
+      await setDoc(roomRef(code), {
+        code,
+        hostId: onlineRoom.playerId,
+        seats: serializeSeatsForRoom(),
+        stacks,
+        dealerIndex,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      subscribeToRoom(code);
+      onlinePanel.classList.add("visible");
+      updateOnlineControls();
+      addActionLog(`Online room ${code} created.`, true);
+    });
+    joinRoomButton.addEventListener("click", async () => {
+      const code = onlineRoomCode.value.trim().toUpperCase();
+      if (!code) {
+        onlineStatus.textContent = "Enter a room code first.";
+        return;
+      }
+      const snapshot = await getDoc(roomRef(code));
+      if (!snapshot.exists()) {
+        onlineStatus.textContent = `Room ${code} was not found.`;
+        return;
+      }
+      onlineRoom.code = code;
+      onlineRoom.isHost = snapshot.data().hostId === onlineRoom.playerId;
+      subscribeToRoom(code);
+      onlinePanel.classList.add("visible");
+      updateOnlineControls();
+      addActionLog(`Joined online room ${code}.`, true);
+    });
+    leaveRoomButton.addEventListener("click", async () => {
+      if (onlineRoom.code) {
+        const currentSeat = occupiedSeats.findIndex((seat) => seat?.type === "user");
+        if (currentSeat >= 0) {
+          occupiedSeats[currentSeat] = null;
+          await writeRoomSeats();
+        }
+      }
+      onlineRoom.unsubscribe?.();
+      onlineRoom.unsubscribe = null;
+      onlineRoom.code = null;
+      onlineRoom.isHost = false;
+      restoreLocalTable();
+      updateOnlineControls();
+      onlineStatus.textContent = "You are in local play.";
+    });
 
     chatToggle.addEventListener("click", () => {
       chatPanel.classList.toggle("visible");
@@ -8621,6 +9179,7 @@
     renderGameChoices();
     updateRulesPreview();
     updateStepControls();
+    updateOnlineControls();
     renderSeating();
     updatePot();
   </script>
