@@ -410,6 +410,15 @@
       text-align: center;
     }
 
+    .dealer-options-line {
+      max-width: min(430px, 100%);
+      color: #f4d28f;
+      font-size: 12px;
+      font-weight: 800;
+      text-align: center;
+      line-height: 1.25;
+    }
+
     .test-deal-button {
       margin-top: 8px;
       width: 100%;
@@ -515,9 +524,71 @@
     }
 
     .dealer-actions {
+      display: none;
+    }
+
+    .game-favorite-list {
+      max-height: 245px;
+      overflow-y: auto;
+      margin-top: 0;
+      padding: 6px;
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
+      gap: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .game-choice-row {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      border-radius: 5px;
+      color: var(--muted);
+    }
+
+    .game-choice-row.selected {
+      background: rgba(79, 163, 216, 0.18);
+      color: var(--text);
+    }
+
+    .game-heart {
+      width: 22px;
+      height: 22px;
+      border: 0;
+      background: transparent;
+      color: #111;
+      font-size: 17px;
+      line-height: 1;
+      padding: 0;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+    }
+
+    .game-heart.active {
+      color: #d94b4b;
+      text-shadow: 0 0 0 #050505;
+    }
+
+    .game-name-button {
+      min-height: 24px;
+      padding: 0 6px;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .card-choice-label {
+      margin-top: 1px;
+      color: #62bdf5;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      line-height: 1;
     }
 
     .rules-preview {
@@ -869,6 +940,47 @@
       padding-top: 2px;
     }
 
+    .discard-pile {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      margin-top: 2px;
+      opacity: 0.82;
+    }
+
+    .discard-pile::before {
+      content: "discard";
+      color: var(--muted);
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .discard-pile:empty {
+      display: none;
+    }
+
+    .discard-pile:empty::before {
+      content: "";
+    }
+
+    .discard-pile .player-card {
+      width: 26px;
+      height: 36px;
+      transform: rotate(-8deg);
+      filter: grayscale(1);
+    }
+
+    .discard-pile .card-corner {
+      font-size: 9px;
+    }
+
+    .discard-pile .card-center-suit {
+      font-size: 14px;
+    }
+
     .player-card {
       width: clamp(20px, 3vw, 28px);
       aspect-ratio: 0.7;
@@ -1099,6 +1211,7 @@
           <button class="tool-button" id="chat-toggle" type="button">Chat</button>
           <button class="tool-button" id="step-mode-toggle" type="button">Step Bots: Off</button>
           <button class="tool-button" id="next-action" type="button" disabled>Next Action</button>
+          <button class="tool-button" id="end-b52-test" type="button" disabled>End B52</button>
         </div>
       </div>
     </header>
@@ -1110,6 +1223,7 @@
           <div class="table-center">
             <div class="pot">Pot: 0</div>
             <div class="current-game" id="current-game">Dealer chooses the next game</div>
+            <div class="dealer-options-line" id="dealer-options-line"></div>
             <div class="round-info" id="round-info">
               <span>Pick a game to load rules</span>
             </div>
@@ -1209,6 +1323,7 @@
             </select>
             <button type="submit">Pick</button>
           </div>
+          <div class="game-favorite-list" id="game-favorite-list" aria-label="Favorite games"></div>
           <div class="pig-bet-settings" id="pig-bet-settings">
             <label for="pig-pre-bet">Pre-draw</label>
             <input id="pig-pre-bet" type="number" min="1" step="1" value="1">
@@ -1605,11 +1720,13 @@
     const dealerButton = document.querySelector("#dealer-button");
     const dealerPanel = document.querySelector("#dealer-panel");
     const currentGame = document.querySelector("#current-game");
+    const dealerOptionsLine = document.querySelector("#dealer-options-line");
     const potDisplay = document.querySelector(".pot");
     const roundInfo = document.querySelector("#round-info");
     const communityCards = document.querySelector("#community-cards");
     const tableCenter = document.querySelector(".table-center");
     const gameChoice = document.querySelector("#game-choice");
+    const gameFavoriteList = document.querySelector("#game-favorite-list");
     const rulesPreview = document.querySelector("#rules-preview");
     const pigBetSettings = document.querySelector("#pig-bet-settings");
     const pigPreBet = document.querySelector("#pig-pre-bet");
@@ -1765,6 +1882,7 @@
     const seatsToggle = document.querySelector("#seats-toggle");
     const stepModeToggle = document.querySelector("#step-mode-toggle");
     const nextActionButton = document.querySelector("#next-action");
+    const endB52Test = document.querySelector("#end-b52-test");
     const seatingPanel = document.querySelector("#seating-panel");
     const seatPicker = document.querySelector("#seat-picker");
     const seatLockNote = document.querySelector("#seat-lock-note");
@@ -2181,6 +2299,8 @@
       }
     };
     const gameNames = Object.keys(gameRules);
+    const favoriteGamesKey = "riverforge.favoriteGames";
+    let favoriteGames = new Set(loadFavoriteGames());
     let pot = 0;
     let dealerIndex = 4;
     let activeIndex = null;
@@ -2191,6 +2311,14 @@
     let actionTimer = null;
     let stepMode = false;
     let waitingForStep = false;
+    const BOT_ACTION_DELAY = 700;
+    const DEAL_CARD_DELAY = 130;
+    const DEAL_FINISH_DELAY = 750;
+    const IN_BETWEEN_OUTSIDE_DELAY = 850;
+    const IN_BETWEEN_RESULT_DELAY = 1800;
+    const IN_BETWEEN_ACE_DELAY = 900;
+    const REDEAL_RESET_DELAY = 2000;
+    const ZERO_UPCARD_DISCARD_DELAY = 950;
     let selectedRollCardIndex = null;
     let selectedPigCards = new Set();
     let selectedDeclareChoice = null;
@@ -2200,6 +2328,93 @@
         ? { type: index === userSeatIndex ? "user" : "bot", name: index === userSeatIndex ? "You" : `Seat ${index + 1}` }
         : null
     ));
+
+    function loadFavoriteGames() {
+      try {
+        return JSON.parse(localStorage.getItem(favoriteGamesKey) || "[]")
+          .filter((name) => gameRules[name]);
+      } catch {
+        return [];
+      }
+    }
+
+    function saveFavoriteGames() {
+      try {
+        localStorage.setItem(favoriteGamesKey, JSON.stringify([...favoriteGames]));
+      } catch {
+        // Favorites are a convenience only; the game still works if storage is blocked.
+      }
+    }
+
+    function renderGameChoices(preferredGame = gameChoice.value || gameNames[0]) {
+      const favorites = gameNames.filter((name) => favoriteGames.has(name));
+      const others = gameNames.filter((name) => !favoriteGames.has(name));
+      gameChoice.innerHTML = "";
+
+      function appendOptions(names, label = null) {
+        const parent = label ? document.createElement("optgroup") : gameChoice;
+        if (label) {
+          parent.label = label;
+        }
+        names.forEach((name) => {
+          const option = document.createElement("option");
+          option.textContent = name;
+          option.value = name;
+          parent.appendChild(option);
+        });
+        if (label && names.length > 0) {
+          gameChoice.appendChild(parent);
+        }
+      }
+
+      appendOptions(favorites, "Favorites");
+      appendOptions(others, favorites.length ? "All games" : null);
+      gameChoice.value = gameRules[preferredGame] ? preferredGame : gameNames[0];
+      renderFavoriteGameList();
+    }
+
+    function renderFavoriteGameList() {
+      const sortedNames = [
+        ...gameNames.filter((name) => favoriteGames.has(name)),
+        ...gameNames.filter((name) => !favoriteGames.has(name))
+      ];
+      gameFavoriteList.innerHTML = "";
+      sortedNames.forEach((name) => {
+        const row = document.createElement("div");
+        row.className = `game-choice-row${gameChoice.value === name ? " selected" : ""}`;
+        const heart = document.createElement("button");
+        heart.type = "button";
+        heart.className = `game-heart${favoriteGames.has(name) ? " active" : ""}`;
+        heart.textContent = favoriteGames.has(name) ? "\u2665" : "\u2661";
+        heart.setAttribute("aria-label", `${favoriteGames.has(name) ? "Unfavorite" : "Favorite"} ${name}`);
+        heart.addEventListener("click", () => toggleFavoriteGame(name));
+
+        const gameButton = document.createElement("button");
+        gameButton.type = "button";
+        gameButton.className = "game-name-button";
+        gameButton.textContent = name;
+        gameButton.addEventListener("click", () => {
+          gameChoice.value = name;
+          renderFavoriteGameList();
+          updateRulesPreview();
+        });
+
+        row.appendChild(heart);
+        row.appendChild(gameButton);
+        gameFavoriteList.appendChild(row);
+      });
+    }
+
+    function toggleFavoriteGame(name = gameChoice.value) {
+      if (favoriteGames.has(name)) {
+        favoriteGames.delete(name);
+      } else {
+        favoriteGames.add(name);
+      }
+      saveFavoriteGames();
+      renderGameChoices(name);
+      updateRulesPreview();
+    }
 
     function setPositionClass(element, prefix, seatNumber) {
       element.className = element.className
@@ -2339,6 +2554,7 @@
 
       dealerPanel.classList.remove("hidden");
       currentGame.textContent = `${seatName(dealerIndex)} is dealer. Choose this hand's game.`;
+      dealerOptionsLine.textContent = "";
 
       if (!isUserSeat(dealerIndex)) {
         const nextGame = gameNames[Math.floor(Math.random() * gameNames.length)];
@@ -2362,8 +2578,112 @@
       });
     }
 
+    function availableStack(index) {
+      return Math.max(0, stacks[index] || 0);
+    }
+
+    function canPay(index, amount) {
+      return availableStack(index) >= amount;
+    }
+
+    function debitStack(index, amount) {
+      const paid = Math.min(Math.max(0, amount), availableStack(index));
+      stacks[index] -= paid;
+      return paid;
+    }
+
+    function creditStack(index, amount) {
+      stacks[index] += Math.max(0, amount);
+    }
+
     function updatePot() {
       potDisplay.textContent = `Pot: ${pot}`;
+    }
+
+    function betList(inputs) {
+      return inputs.map((input) => input.value).join(", ");
+    }
+
+    function currentDealerOptionsText(rules) {
+      if (!rules) return "";
+      if (!rules.kind && Number.isFinite(rules.betThreshold)) {
+        return `Forced bet ${rules.openingBet}; ${rules.openingBetAtFourteen} when showing ${rules.betThreshold}+`;
+      }
+      if (!rules.kind) {
+        return `Forced bet ${rules.openingBet}; max raises ${rules.maxRaises}`;
+      }
+
+      if (rules.kind === "littlePig") {
+        return `Pre-draw ${pigPreBet.value}; post-draw ${pigPostBet.value}`;
+      }
+      if (rules.kind === "christmasTree") {
+        const cards = rules.omaha ? "4 cards" : `${treeCardCountChoice.value} cards`;
+        return `${cards}; bets ${betList(treeBetInputs)}${treeFaceBet.checked ? "; final bet face" : ""}`;
+      }
+      if (rules.kind === "omaha") {
+        return rules.highLow ? "High-low; 8-or-better low" : "High only";
+      }
+      if (rules.kind === "sliderPig") {
+        return `Pre ${sliderPreBet.value}; post ${sliderPostBet.value}; last ${sliderLastBet.value}${sliderFaceBet.checked ? " face" : ""}`;
+      }
+      if (rules.kind === "fiveTen") {
+        return `Drawing ${fiveTenDrawBet.value}; showdown ${fiveTenShowBet.value}; ${fiveTenDirection.value} ${fiveTenSuit.value}`;
+      }
+      if (rules.kind === "b52") {
+        return `Ante ${b52Ante.value}; ${b52PayMode.value === "pot" ? "pay the pot" : "pay the player"}`;
+      }
+      if (rules.kind === "grinner") {
+        return `${grinnerCardCount.value} cards; splitter ${grinnerDirection.value}${grinnerFlimflam.checked ? "; Flim Flam" : ""}; bets ${betList(grinnerBetInputs)}${grinnerFaceBet.checked ? "; final bet face" : ""}`;
+      }
+      if (rules.kind === "bingo") {
+        return `Bets ${betList(bingoBetInputs)}${bingoFaceBet.checked ? "; final bet face" : ""}`;
+      }
+      if (rules.kind === "shotgun") {
+        return `Bets ${betList(shotgunBetInputs)}${shotgunFaceBet.checked ? "; final bet face" : ""}`;
+      }
+      if (rules.kind === "inbetween") {
+        const options = [
+          inbetweenConnectors.checked ? "connectors/pairs" : null,
+          inbetweenSuited.checked ? "suited connectors" : null,
+          inbetweenSplitting.checked ? "splitting" : null
+        ].filter(Boolean).join(", ") || "no extras";
+        return `Ante ${inbetweenAnte.value}; ${options}`;
+      }
+      if (rules.kind === "cincinnati") {
+        return `${cincinnatiCardCount.value} cards; split card ${cincinnatiSplitCard.value}; bets ${betList(cincinnatiBetInputs)}`;
+      }
+      if (rules.kind === "circle") {
+        const mode = circleSplitter.checked
+          ? `splitter ${circleSplitterDirection.value}`
+          : circleWild.checked
+          ? "wild"
+          : "no splitter/wild";
+        return `${circleCardCount.value} cards; ${mode}; bets ${betList(circleBetInputs)}${circleFaceBet.checked ? "; final bet face" : ""}`;
+      }
+      if (rules.kind === "mariah") {
+        return `${mariahLastUp.checked ? `last card up; down costs ${mariahDownCost.value}` : "last card down"}; ${mariahAllowShow.checked ? "Black Mariah show allowed" : "Black Mariah only if dealt up"}`;
+      }
+      if (rules.kind === "followQueen") {
+        const split = followSplitter.checked
+          ? `${followDirection.value} ${followSuit.value} splitter`
+          : "no splitter";
+        return `${split}; ${followLastUp.checked ? `last card up; down costs ${followDownCost.value}` : "last card down"}`;
+      }
+      if (rules.kind === "night") {
+        const costText = nightProgressive.checked
+          ? "3s/9s progressive"
+          : `3s ${nightThreeCost.value}; 9s ${nightNineCost.value}`;
+        return `${costText}; ${nightFourExtra.checked ? `4s extra card costs ${nightFourCost.value}` : "4s extra off"}`;
+      }
+      if (rules.kind === "potBlackjack") {
+        return `Dealer wager ${blackjackDealerWager.value}`;
+      }
+      return "";
+    }
+
+    function setCurrentGameDisplay(name, options = "") {
+      currentGame.textContent = name ? `Current game: ${name}` : "Dealer chooses the next game";
+      dealerOptionsLine.textContent = options || "";
     }
 
     function setTableMessage(primary, secondary = "") {
@@ -2466,9 +2786,10 @@
       stepModeToggle.textContent = `Step Bots: ${stepMode ? "On" : "Off"}`;
       stepModeToggle.classList.toggle("active", stepMode);
       nextActionButton.disabled = !waitingForStep;
+      endB52Test.disabled = !(handState?.rules?.kind === "b52");
     }
 
-    function scheduleNextAction(delay = 250) {
+    function scheduleNextAction(delay = BOT_ACTION_DELAY) {
       clearTimeout(actionTimer);
 
       if (!handState || activeIndex === null) {
@@ -2799,8 +3120,9 @@
 
     dealerPanel.addEventListener("submit", (event) => {
       event.preventDefault();
-      currentGame.textContent = `Current game: ${gameChoice.value}`;
       const rules = gameRules[gameChoice.value];
+      const dealerOptions = currentDealerOptionsText(rules);
+      setCurrentGameDisplay(gameChoice.value, dealerOptions);
       updateRulesPreview();
       if (rules) {
         const betBumpText = rules.kind === "littlePig"
@@ -2848,7 +3170,10 @@
       }
     });
 
-    gameChoice.addEventListener("change", updateRulesPreview);
+    gameChoice.addEventListener("change", () => {
+      renderFavoriteGameList();
+      updateRulesPreview();
+    });
     sliderPreBet.addEventListener("input", updateRulesPreview);
     sliderPostBet.addEventListener("input", updateRulesPreview);
     sliderLastBet.addEventListener("input", updateRulesPreview);
@@ -3096,8 +3421,37 @@
       return Boolean(handState?.upCards?.[seatIndex]?.has(cardIndex));
     }
 
+    function isDiscardedUpCard(seatIndex, cardIndex) {
+      return Boolean(handState?.discardedUpCards?.[seatIndex]?.has(cardIndex));
+    }
+
     function publicCardsForSeat(hands, seatIndex, upCards) {
-      return hands[seatIndex].filter((_, cardIndex) => upCards[seatIndex]?.has(cardIndex));
+      return hands[seatIndex].filter((_, cardIndex) => (
+        upCards[seatIndex]?.has(cardIndex) && !isDiscardedUpCard(seatIndex, cardIndex)
+      ));
+    }
+
+    function shouldDiscardZeroUpCard(sampleCard, rules = handState?.rules) {
+      return Boolean(rules?.zeroColor && sampleCard?.color === rules.zeroColor);
+    }
+
+    function isPrivatelyDiscardedZeroCard(seatIndex, cardIndex) {
+      const sampleCard = handState?.hands?.[seatIndex]?.[cardIndex];
+      return Boolean(
+        isUserSeat(seatIndex)
+        && sampleCard
+        && !isPublicCard(seatIndex, cardIndex)
+        && shouldDiscardZeroUpCard(sampleCard, handState.rules)
+      );
+    }
+
+    function isVisuallyDiscardedCard(seatIndex, cardIndex) {
+      return isDiscardedUpCard(seatIndex, cardIndex) || isPrivatelyDiscardedZeroCard(seatIndex, cardIndex);
+    }
+
+    function visibleScoringCards(index) {
+      const cards = handState?.hands?.[index] || [];
+      return cards.filter((_, cardIndex) => !isVisuallyDiscardedCard(index, cardIndex));
     }
 
     function buildCardFace(cardElement, sampleCard, rules = handState?.rules || gameRules[gameChoice.value]) {
@@ -3155,10 +3509,10 @@
       for (let cardRound = 0; cardRound < rules.cardsPerPlayer; cardRound += 1) {
         for (const seatIndex of players) {
           animateDealToSeat(seatIndex, cardRound);
-          await wait(55);
+          await wait(DEAL_CARD_DELAY);
         }
       }
-      await wait(430);
+      await wait(DEAL_FINISH_DELAY);
     }
 
     function findOpeningBettor(hands, rules, upCards) {
@@ -3194,10 +3548,10 @@
     }
 
     function postForcedBet(index, amount) {
-      stacks[index] -= amount;
-      pot += amount;
-      handState.contributions[index] = amount;
-      handState.currentBet = amount;
+      const paid = debitStack(index, amount);
+      pot += paid;
+      handState.contributions[index] = paid;
+      handState.currentBet = paid;
       updateStacks();
       updatePot();
     }
@@ -3207,12 +3561,10 @@
 
       occupiedIndexes().forEach((index) => {
         const ante = index === dealerIndex ? rules.dealerAnte : rules.playerAnte;
-        stacks[index] -= ante;
-        pot += ante;
+        pot += debitStack(index, ante);
       });
 
-      stacks[openingBettorIndex] -= openingBet;
-      pot += openingBet;
+      pot += debitStack(openingBettorIndex, openingBet);
       updateStacks();
       updatePot();
     }
@@ -3222,8 +3574,7 @@
 
       occupiedIndexes().forEach((index) => {
         const ante = index === dealerIndex ? rules.dealerAnte : rules.playerAnte;
-        stacks[index] -= ante;
-        pot += ante;
+        pot += debitStack(index, ante);
       });
 
       updateStacks();
@@ -3251,7 +3602,7 @@
       }
 
       return isUserSeat(index)
-        ? handState.hands[index]
+        ? visibleScoringCards(index)
         : publicCardsForSeat(handState.hands, index, handState.upCards);
     }
 
@@ -3275,12 +3626,15 @@
       const seat = seats[seatIndex];
       const hand = seat.querySelector(".hand");
       hand.innerHTML = "";
+      seat.querySelector(".discard-pile")?.remove();
 
       if (!handState?.hands?.[seatIndex]) {
         return;
       }
 
-      const cardEntries = handState.hands[seatIndex].map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }));
+      const cardEntries = handState.hands[seatIndex]
+        .map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }))
+        .filter((entry) => !isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
       const orderedCards = handState.phase === "rolling"
         ? cardEntries
         : [
@@ -3360,6 +3714,22 @@
 
         hand.appendChild(card);
       });
+
+      const discardedEntries = handState.hands[seatIndex]
+        .map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }))
+        .filter((entry) => isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
+
+      if (discardedEntries.length > 0) {
+        const discardPile = document.createElement("div");
+        discardPile.className = "discard-pile";
+        discardedEntries.forEach(({ sampleCard }) => {
+          const card = document.createElement("div");
+          card.className = "player-card";
+          buildCardFace(card, sampleCard, handState.rules);
+          discardPile.appendChild(card);
+        });
+        hand.insertAdjacentElement("afterend", discardPile);
+      }
     }
 
     function renderAllHands() {
@@ -3412,7 +3782,7 @@
       handState.pending = new Set(occupiedIndexes().filter((index) => index !== openingBettor.index));
       handState.lastAction = `${seatName(openingBettor.index)} opened for ${openingBet}`;
       postForcedBet(openingBettor.index, openingBet);
-      currentGame.textContent = `Current game: ${handState.rules.name}`;
+      setCurrentGameDisplay(handState.rules.name, handState.dealerOptions || currentDealerOptionsText(handState.rules));
       setTableMessage(`${seatName(openingBettor.index)} posts the forced bet.`, `${reason}. Showing ${openingBettor.value}, posts ${openingBet}. Action is on ${seatName(nextIndex)}.`);
       addActionLog(`${seatName(openingBettor.index)} shows ${openingBettor.value} and posts ${openingBet}.`, true);
       renderAllHands();
@@ -3421,7 +3791,7 @@
       scheduleNextAction();
     }
 
-    function finishRollPhaseIfReady() {
+    async function finishRollPhaseIfReady() {
       if (handState.pending.size > 0) {
         return;
       }
@@ -3439,6 +3809,7 @@
       renderAllHands();
       refreshPointBadges();
       addActionLog("All roll cards are revealed. Opening betting begins.", true);
+      await discardZeroUpCardsAfterReveal();
       startInitialBettingRound("All players have rolled");
     }
 
@@ -3522,6 +3893,12 @@
           card.className = cardIndex === 1 && !sampleCard ? "card-gap" : "player-card";
           if (sampleCard) {
             buildCardFace(card, sampleCard, handState.rules);
+            if (cardIndex === 0 && sampleCard.rank === "A" && handState.inBetweenAceChoice) {
+              const label = document.createElement("div");
+              label.className = "card-choice-label";
+              label.textContent = handState.inBetweenAceChoice;
+              card.appendChild(label);
+            }
           }
           communityCards.appendChild(card);
         });
@@ -3656,21 +4033,21 @@
     function startRotatingBettingRound(reason, amount, title) {
       const previousStarter = handState.lastBetStarter ?? dealerIndex;
       const starter = nextActiveIndex(previousStarter);
+      const postedAmount = Math.min(amount, availableStack(starter));
       handState.phase = "betting";
       handState.raiseCount = 0;
-      handState.contributions = seats.map((_, index) => index === starter ? amount : 0);
-      handState.currentBet = amount;
+      handState.contributions = seats.map((_, index) => index === starter ? postedAmount : 0);
+      handState.currentBet = postedAmount;
       handState.betUnit = amount;
       handState.pending = new Set(activePlayerIndexes().filter((index) => index !== starter));
       handState.lastBetStarter = starter;
-      stacks[starter] -= amount;
-      pot += amount;
+      pot += debitStack(starter, postedAmount);
       updateStacks();
       updatePot();
       const nextIndex = nextActiveIndex(starter);
-      handState.lastAction = `${seatName(starter)} opened for ${amount}`;
-      addActionLog(`${seatName(starter)} starts this round for ${amount}.`, true);
-      setTableMessage(title, `${reason}. ${seatName(starter)} posts ${amount}. Action is on ${seatName(nextIndex)}.`);
+      handState.lastAction = `${seatName(starter)} opened for ${postedAmount}`;
+      addActionLog(`${seatName(starter)} starts this round for ${postedAmount}.`, true);
+      setTableMessage(title, `${reason}. ${seatName(starter)} posts ${postedAmount}. Action is on ${seatName(nextIndex)}.`);
       setActiveSeat(nextIndex, "Action");
       scheduleNextAction();
     }
@@ -3739,7 +4116,7 @@
 
     function computerB52Declare(index) {
       const strength = scoreStrength(evaluateB52(handState.hands[index]));
-      b52Declare(index, strength > 0.42 || Math.random() < botPersonality(index).looseness + 0.2);
+      b52Declare(index, strength > 0.58 || Math.random() < botPersonality(index).looseness * 0.35);
       advanceAfterAction();
     }
 
@@ -3771,6 +4148,7 @@
         seat.classList.remove("folded");
         seat.dataset.points = "";
         seat.querySelector(".hand").innerHTML = "";
+        seat.querySelector(".discard-pile")?.remove();
       });
       communityCards.innerHTML = "";
       communityCards.classList.remove("dummy-layout");
@@ -3780,6 +4158,31 @@
       setTableMessage("B52 continues.", `${resultText}. Pot carries at ${pot}. Deal passes to ${seatName(dealerIndex)}.`);
       addActionLog(`B52 continues. Deal passes to ${seatName(dealerIndex)}.`, true);
       await startB52Deal(previousState.rules, originalDealer, true);
+    }
+
+    function endB52ForTesting() {
+      if (!handState || handState.rules.kind !== "b52") {
+        return;
+      }
+
+      const players = occupiedIndexes();
+      const oldPot = pot;
+      if (players.length > 0 && oldPot > 0) {
+        const share = Math.floor(oldPot / players.length);
+        let remainder = oldPot % players.length;
+        players.forEach((index) => {
+          const extra = remainder > 0 ? 1 : 0;
+          creditStack(index, share + extra);
+          remainder -= extra;
+        });
+      }
+
+      addActionLog(`B52 test ended. Pot ${oldPot} was split around the table.`, true);
+      resetTableForDeal();
+      dealerIndex = nextOccupiedIndex(dealerIndex);
+      updateStacks();
+      updateDealer();
+      setTableMessage("B52 ended for testing.", "The pot was split evenly and the dealer moved.");
     }
 
     function finishB52Showdown() {
@@ -3799,18 +4202,15 @@
       const losers = contenders.filter((index) => index !== winnerIndex);
 
       if (winnerIndex !== null && handState.b52PayMode === "pot") {
-        stacks[winnerIndex] += potSize;
-        pot = losers.length * potSize;
-        losers.forEach((index) => stacks[index] -= potSize);
+        creditStack(winnerIndex, potSize);
+        pot = losers.reduce((total, index) => total + debitStack(index, potSize), 0);
       } else if (winnerIndex !== null) {
         losers.forEach((index) => {
-          stacks[index] -= potSize;
-          stacks[winnerIndex] += potSize;
+          creditStack(winnerIndex, debitStack(index, potSize));
         });
       } else {
         contenders.forEach((index) => {
-          stacks[index] -= potSize;
-          pot += potSize;
+          pot += debitStack(index, potSize);
         });
       }
 
@@ -4187,20 +4587,60 @@
       handState.upCards[seatIndex].add(handState.hands[seatIndex].length - 1);
     }
 
+    async function discardZeroUpCardAfterReveal(seatIndex, cardIndex, delay = ZERO_UPCARD_DISCARD_DELAY) {
+      const state = handState;
+      const sampleCard = handState?.hands?.[seatIndex]?.[cardIndex];
+      if (!sampleCard || !isPublicCard(seatIndex, cardIndex) || isDiscardedUpCard(seatIndex, cardIndex)) {
+        return false;
+      }
+      if (!shouldDiscardZeroUpCard(sampleCard, handState.rules)) {
+        return false;
+      }
+
+      await wait(delay);
+      if (handState !== state || !handState?.hands?.[seatIndex]?.[cardIndex] || isDiscardedUpCard(seatIndex, cardIndex)) {
+        return false;
+      }
+
+      handState.discardedUpCards[seatIndex].add(cardIndex);
+      renderSeatHand(seatIndex);
+      refreshPointBadges();
+      addActionLog(`${seatName(seatIndex)} discards ${sampleCard.rank}${sampleCard.suit} for 0.`, true);
+      return true;
+    }
+
+    async function discardZeroUpCardsAfterReveal(delay = ZERO_UPCARD_DISCARD_DELAY) {
+      if (!handState?.discardedUpCards || !handState.rules?.zeroColor) {
+        return;
+      }
+
+      const tasks = [];
+      occupiedIndexes().forEach((seatIndex) => {
+        handState.upCards[seatIndex]?.forEach((cardIndex) => {
+          tasks.push(discardZeroUpCardAfterReveal(seatIndex, cardIndex, delay));
+        });
+      });
+      await Promise.all(tasks);
+    }
+
     function updateBettingButtons() {
       const toCall = Math.max(0, handState.currentBet - handState.contributions[activeIndex]);
       const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
       const raiseUnit = studBetting ? 1 : handState.betUnit;
       const canBetTwo = studBetting && hasShowingPair(activeIndex) && handState.raiseCount < handState.rules.maxRaises;
+      const raiseTo = handState.currentBet + raiseUnit;
+      const raiseCost = Math.max(0, raiseTo - handState.contributions[activeIndex]);
+      const betTwoTo = handState.currentBet + 2;
+      const betTwoCost = Math.max(0, betTwoTo - handState.contributions[activeIndex]);
       callButton.textContent = toCall > 0 ? `Call ${toCall}` : "Call 0";
-      callButton.disabled = false;
+      callButton.disabled = toCall > availableStack(activeIndex);
       raiseButton.textContent = handState.raiseCount >= handState.rules.maxRaises
         ? "Raise Maxed"
-        : `${handState.currentBet === 0 ? "Bet" : "Raise to"} ${handState.currentBet + raiseUnit}`;
-      raiseButton.disabled = handState.raiseCount >= handState.rules.maxRaises;
-      studBetTwoButton.textContent = handState.currentBet === 0 ? "Bet 2" : `Raise to ${handState.currentBet + 2}`;
+        : `${handState.currentBet === 0 ? "Bet" : "Raise to"} ${raiseTo}`;
+      raiseButton.disabled = handState.raiseCount >= handState.rules.maxRaises || raiseCost > availableStack(activeIndex);
+      studBetTwoButton.textContent = handState.currentBet === 0 ? "Bet 2" : `Raise to ${betTwoTo}`;
       studBetTwoButton.style.display = canBetTwo ? "" : "none";
-      studBetTwoButton.disabled = !canBetTwo;
+      studBetTwoButton.disabled = !canBetTwo || betTwoCost > availableStack(activeIndex);
       foldButton.textContent = "Fold";
       foldButton.disabled = false;
     }
@@ -4338,37 +4778,46 @@
 
     function payToCall(index) {
       const toCall = Math.max(0, handState.currentBet - handState.contributions[index]);
-      stacks[index] -= toCall;
-      pot += toCall;
-      handState.contributions[index] += toCall;
+      if (toCall > availableStack(index)) {
+        return false;
+      }
+      const paid = debitStack(index, toCall);
+      pot += paid;
+      handState.contributions[index] += paid;
       handState.pending.delete(index);
       handState.lastAction = `${seatName(index)} called${toCall > 0 ? ` ${toCall}` : ""}`;
       addActionLog(handState.lastAction);
       updateStacks();
       updatePot();
+      return true;
     }
 
     function raisePlayer(index, requestedUnit = null) {
       if (handState.raiseCount >= handState.rules.maxRaises) {
-        return;
+        return false;
       }
 
       const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
       const raiseUnit = studBetting ? Math.min(2, Math.max(1, Number(requestedUnit) || 1)) : handState.betUnit;
       if (studBetting && raiseUnit === 2 && !hasShowingPair(index)) {
-        return;
+        return false;
       }
-      handState.currentBet += raiseUnit;
+      const nextBet = handState.currentBet + raiseUnit;
+      const toPay = Math.max(0, nextBet - handState.contributions[index]);
+      if (toPay > availableStack(index)) {
+        return false;
+      }
+      handState.currentBet = nextBet;
       handState.raiseCount += 1;
-      const toPay = Math.max(0, handState.currentBet - handState.contributions[index]);
-      stacks[index] -= toPay;
-      pot += toPay;
-      handState.contributions[index] += toPay;
+      const paid = debitStack(index, toPay);
+      pot += paid;
+      handState.contributions[index] += paid;
       handState.pending = new Set(activePlayerIndexes().filter((playerIndex) => playerIndex !== index));
       handState.lastAction = `${seatName(index)} raised to ${handState.currentBet}`;
       addActionLog(handState.lastAction);
       updateStacks();
       updatePot();
+      return true;
     }
 
     function foldPlayer(index) {
@@ -4386,6 +4835,7 @@
       const hand = seats[index].querySelector(".hand");
       const cardCount = handState.hands[index]?.length || hand.children.length;
       hand.innerHTML = "";
+      seats[index].querySelector(".discard-pile")?.remove();
 
       for (let count = 0; count < cardCount; count += 1) {
         const card = document.createElement("div");
@@ -4412,13 +4862,32 @@
         const handCards = handState.hands[seatIndex];
         const hand = seats[seatIndex].querySelector(".hand");
         hand.innerHTML = "";
+        seats[seatIndex].querySelector(".discard-pile")?.remove();
 
-        handCards.forEach((sampleCard) => {
+        handCards.forEach((sampleCard, cardIndex) => {
+          if (isVisuallyDiscardedCard(seatIndex, cardIndex)) {
+            return;
+          }
           const card = document.createElement("div");
           card.className = "player-card";
           buildCardFace(card, sampleCard);
           hand.appendChild(card);
         });
+
+        const discardedEntries = handCards
+          .map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }))
+          .filter((entry) => isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
+        if (discardedEntries.length > 0) {
+          const discardPile = document.createElement("div");
+          discardPile.className = "discard-pile";
+          discardedEntries.forEach(({ sampleCard }) => {
+            const card = document.createElement("div");
+            card.className = "player-card";
+            buildCardFace(card, sampleCard);
+            discardPile.appendChild(card);
+          });
+          hand.insertAdjacentElement("afterend", discardPile);
+        }
       });
     }
 
@@ -5301,8 +5770,16 @@
 
     function fiveTenDeclare(index, inHand) {
       if (inHand) {
-        stacks[index] -= handState.fiveTenDrawBet;
-        pot += handState.fiveTenDrawBet;
+        if (!canPay(index, handState.fiveTenDrawBet)) {
+          foldPlayer(index);
+          handState.lastAction = `${seatName(index)} folded`;
+          handState.pending.delete(index);
+          updateStacks();
+          updatePot();
+          addActionLog(handState.lastAction);
+          return;
+        }
+        pot += debitStack(index, handState.fiveTenDrawBet);
         handState.inPlayers.add(index);
         handState.lastAction = `${seatName(index)} declared in`;
       } else {
@@ -5649,9 +6126,10 @@
 
     function inBetweenMaxWager() {
       if (!handState || pot <= 0) return 0;
-      return handState.inBetweenTurnsCompleted < occupiedIndexes().length
+      const potLimit = handState.inBetweenTurnsCompleted < occupiedIndexes().length
         ? Math.max(1, Math.floor(pot / 2))
         : pot;
+      return Math.min(potLimit, availableStack(activeIndex ?? userSeatIndex));
     }
 
     function inBetweenDrawCard() {
@@ -5682,14 +6160,13 @@
       const [leftCard, , rightCard] = handState.communityCards;
       const penalty = inBetweenConnectorPenalty(leftCard, rightCard);
       if (penalty <= 0) return;
-      stacks[index] -= penalty;
-      pot += penalty;
+      pot += debitStack(index, penalty);
       updateStacks();
       updatePot();
       addActionLog(`${seatName(index)} pays ${penalty} for connectors/pair.`, true);
     }
 
-    function startInBetweenTurn(index = nextOccupiedIndex(dealerIndex)) {
+    async function startInBetweenTurn(index = nextOccupiedIndex(dealerIndex)) {
       if (pot <= 0) {
         finishInBetweenGame(index);
         return;
@@ -5709,6 +6186,8 @@
         return;
       }
 
+      await wait(IN_BETWEEN_OUTSIDE_DELAY);
+      if (!handState || handState.rules.kind !== "inbetween" || handState.phase !== "inbetweenDeal") return;
       finishInBetweenOutsideDeal(index);
     }
 
@@ -5723,10 +6202,13 @@
       scheduleNextAction();
     }
 
-    function chooseInBetweenAce(index, choice) {
+    async function chooseInBetweenAce(index, choice) {
       hideActionPanels();
       handState.inBetweenAceChoice = choice;
+      renderCommunityCards();
       addActionLog(`${seatName(index)} plays the ace ${choice}.`, true);
+      await wait(IN_BETWEEN_ACE_DELAY);
+      if (!handState || handState.rules.kind !== "inbetween" || handState.phase !== "inbetweenAce") return;
       finishInBetweenOutsideDeal(index);
     }
 
@@ -5748,15 +6230,18 @@
       beginReadyUpPhase();
     }
 
-    function inBetweenPass(index) {
+    async function inBetweenPass(index) {
       hideActionPanels();
       handState.inBetweenTurnsCompleted += 1;
       handState.lastAction = `${seatName(index)} passed`;
       addActionLog(handState.lastAction);
+      setTableMessage("In Between the Sheets.", `${seatName(index)} passed.`);
+      await wait(IN_BETWEEN_RESULT_DELAY * 0.65);
+      if (!handState || handState.rules.kind !== "inbetween") return;
       startInBetweenTurn(nextOccupiedIndex(index));
     }
 
-    function inBetweenResolve(index, amount) {
+    async function inBetweenResolve(index, amount) {
       hideActionPanels();
       const wager = Math.min(Math.max(1, amount), inBetweenMaxWager());
       const [leftCard, , rightCard] = handState.communityCards;
@@ -5773,17 +6258,18 @@
 
       if (middle === left || middle === right) {
         const loss = wager * 2;
-        stacks[index] -= loss;
-        pot += loss;
-        resultText = `matched and paid ${loss}`;
+        const paid = debitStack(index, loss);
+        pot += paid;
+        resultText = `matched and paid ${paid}`;
       } else if (middle > low && middle < high) {
-        stacks[index] += wager;
-        pot -= wager;
-        resultText = `won ${wager}`;
+        const paid = Math.min(wager, pot);
+        creditStack(index, paid);
+        pot -= paid;
+        resultText = `won ${paid}`;
       } else {
-        stacks[index] -= wager;
-        pot += wager;
-        resultText = `lost ${wager}`;
+        const paid = debitStack(index, wager);
+        pot += paid;
+        resultText = `lost ${paid}`;
       }
 
       updateStacks();
@@ -5791,20 +6277,25 @@
       handState.inBetweenTurnsCompleted += 1;
       handState.lastAction = `${seatName(index)} ${resultText}`;
       addActionLog(handState.lastAction, true);
+      setTableMessage("In Between result.", `${seatName(index)} ${resultText}.`);
 
       if (pot <= 0) {
+        await wait(IN_BETWEEN_RESULT_DELAY);
+        if (!handState || handState.rules.kind !== "inbetween") return;
         finishInBetweenGame(index);
         return;
       }
 
+      await wait(IN_BETWEEN_RESULT_DELAY);
+      if (!handState || handState.rules.kind !== "inbetween") return;
       startInBetweenTurn(nextOccupiedIndex(index));
     }
 
     function computerInBetweenAction(index) {
       if (handState.phase === "inbetweenAce") {
         const [leftCard, , rightCard] = handState.communityCards;
-        const otherCard = leftCard.rank === "A" ? rightCard : leftCard;
-        chooseInBetweenAce(index, highRankValue(otherCard) >= 8 ? "low" : "high");
+        const otherCard = leftCard?.rank === "A" ? rightCard : leftCard;
+        chooseInBetweenAce(index, otherCard && highRankValue(otherCard) >= 8 ? "low" : "high");
         return;
       }
 
@@ -5877,7 +6368,13 @@
       return scored.filter((entry) => entry.score === best).map((entry) => entry.index);
     }
 
-    function redealCincinnati() {
+    async function redealCincinnati() {
+      hideActionPanels();
+      setTableMessage("Cincinnati redeal.", "No high qualifier. Pot rolls and the table will redeal.");
+      addActionLog("No Cincinnati high qualifier. Pot rolls to a redeal.", true);
+      await wait(REDEAL_RESET_DELAY);
+      if (!handState || handState.rules.kind !== "cincinnati") return;
+
       const players = occupiedIndexes();
       const deck = buildDeck();
       const dealtHands = buildOpeningDeal(handState.rules, deck);
@@ -5899,7 +6396,6 @@
         }
       });
       renderCommunityCards();
-      addActionLog("No Cincinnati high qualifier. Pot rolls to a redeal.", true);
       startCincinnatiBettingRound("Redeal first card is up");
     }
 
@@ -6299,8 +6795,7 @@
         updateFollowWildFromUpCard(card);
       } else {
         clearUnresolvedFollow();
-        stacks[index] -= handState.mariahDownCost;
-        pot += handState.mariahDownCost;
+        pot += debitStack(index, handState.mariahDownCost);
         updateStacks();
         updatePot();
       }
@@ -6338,7 +6833,13 @@
       resetBlackMariah(`${seatName(index)} showed Black Mariah`);
     }
 
-    function resetBlackMariah(reason) {
+    async function resetBlackMariah(reason) {
+      hideActionPanels();
+      setTableMessage("Black Mariah reset.", `${reason}. Pot stays and the active players redeal.`);
+      addActionLog(`${reason}. Black Mariah resets and the pot stays.`, true);
+      await wait(REDEAL_RESET_DELAY);
+      if (!handState || handState.rules.kind !== "mariah") return;
+
       const players = occupiedIndexes();
       const deck = buildDeck();
       const dealtHands = buildOpeningDeal(handState.rules, deck);
@@ -6363,9 +6864,8 @@
           muckCards(index);
         }
       });
-      addActionLog(`${reason}. Black Mariah resets and the pot stays.`, true);
       if (activePlayerIndexes().some((index) => publicMariahCards(index).some(isBlackMariah))) {
-        resetBlackMariah("Black Mariah appeared again on the redeal");
+        await resetBlackMariah("Black Mariah appeared again on the redeal");
         return;
       }
       startMariahBettingRound("Redeal complete", false);
@@ -6610,11 +7110,11 @@
 
     function payNightPenalty(index, amount, label) {
       if (amount <= 0) return;
-      stacks[index] -= amount;
-      pot += amount;
+      const paid = debitStack(index, amount);
+      pot += paid;
       updateStacks();
       updatePot();
-      addActionLog(`${seatName(index)} pays ${amount} for ${label}.`, true);
+      addActionLog(`${seatName(index)} pays ${paid} for ${label}.`, true);
     }
 
     function startNightFlip(index = nextActiveIndex(activeIndex ?? dealerIndex)) {
@@ -6676,8 +7176,7 @@
       if (take) {
         const card = drawCard();
         if (card) {
-          stacks[index] -= handState.nightFourCost;
-          pot += handState.nightFourCost;
+          pot += debitStack(index, handState.nightFourCost);
           handState.hands[index].push(card);
           updateStacks();
           updatePot();
@@ -6783,7 +7282,8 @@
 
     function blackjackMaxWager() {
       if (pot <= 0) return 0;
-      return handState.blackjackRound === 1 ? Math.max(1, Math.floor(pot / 2)) : pot;
+      const potLimit = handState.blackjackRound === 1 ? Math.max(1, Math.floor(pot / 2)) : pot;
+      return Math.min(potLimit, availableStack(activeIndex ?? userSeatIndex));
     }
 
     function blackjackPlayers() {
@@ -6901,13 +7401,14 @@
       }
 
       if (playerWins) {
-        stacks[index] += handState.blackjackWager;
-        pot -= handState.blackjackWager;
-        handState.lastAction = `${seatName(index)} won ${handState.blackjackWager}`;
+        const paid = Math.min(handState.blackjackWager, pot);
+        creditStack(index, paid);
+        pot -= paid;
+        handState.lastAction = `${seatName(index)} won ${paid}`;
       } else {
-        stacks[index] -= handState.blackjackWager;
-        pot += handState.blackjackWager;
-        handState.lastAction = `${reason}. ${seatName(index)} lost ${handState.blackjackWager}`;
+        const paid = debitStack(index, handState.blackjackWager);
+        pot += paid;
+        handState.lastAction = `${reason}. ${seatName(index)} lost ${paid}`;
       }
       updateStacks();
       updatePot();
@@ -6969,7 +7470,8 @@
       const [lowLabel, highLabel] = [handState.rules.lowLabel, handState.rules.highLabel];
 
       return occupiedIndexes().map((index) => {
-        const handCards = handState.hands[index] || [];
+        const handCards = (handState.hands[index] || [])
+          .filter((_, cardIndex) => !isVisuallyDiscardedCard(index, cardIndex));
         const winLabels = [
           lowWinners.includes(index) ? `${lowLabel} WIN` : "",
           highWinners.includes(index) ? `${highLabel} WIN` : ""
@@ -7228,7 +7730,8 @@
       scheduleNextAction();
     }
 
-    function computerHit(index) {
+    async function computerHit(index) {
+      hideActionPanels();
       const drawnCard = drawCard();
       if (!drawnCard) {
         handState.pending.clear();
@@ -7238,6 +7741,10 @@
 
       handState.hands[index].push(drawnCard);
       renderDrawnCard(index, drawnCard);
+      await discardZeroUpCardAfterReveal(index, handState.hands[index].length - 1);
+      if (!handState || handState.phase !== "drawing") {
+        return;
+      }
       handState.pending.delete(index);
       handState.lastAction = `${seatName(index)} hit`;
       addActionLog(handState.lastAction);
@@ -7402,6 +7909,11 @@
 
     function computerBet(index) {
       const toCall = Math.max(0, handState.currentBet - handState.contributions[index]);
+      if (toCall > availableStack(index)) {
+        foldPlayer(index);
+        advanceAfterAction();
+        return;
+      }
       if (["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen", "grinner", "bingo", "shotgun", "cincinnati", "circle", "mariah", "followQueen", "night"].includes(handState.rules.kind)) {
         const strength = botHandStrength(index);
         const shouldFold = botShouldFold(index, toCall, strength);
@@ -7416,7 +7928,9 @@
         if (shouldRaise) {
           const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
           const unit = studBetting && hasShowingPair(index) && strength > 0.58 ? 2 : 1;
-          raisePlayer(index, studBetting ? unit : null);
+          if (!raisePlayer(index, studBetting ? unit : null)) {
+            payToCall(index);
+          }
           advanceAfterAction();
           return;
         }
@@ -7437,7 +7951,9 @@
       }
 
       if (shouldRaise) {
-        raisePlayer(index);
+        if (!raisePlayer(index)) {
+          payToCall(index);
+        }
         advanceAfterAction();
         return;
       }
@@ -7528,6 +8044,7 @@
         seat.classList.remove("folded");
         seat.dataset.points = "";
         seat.querySelector(".hand").innerHTML = "";
+        seat.querySelector(".discard-pile")?.remove();
       });
       communityCards.innerHTML = "";
       communityCards.classList.remove("tree-layout", "dummy-layout", "shotgun-layout", "inbetween-layout", "cincinnati-layout", "circle-layout", "slider-layout");
@@ -7557,6 +8074,7 @@
         deckIndex: rules.cardsPerPlayer * players.length + rules.communityCards,
         hands: dealtHands,
         upCards: createOpeningUpCards(rules, players),
+        discardedUpCards: seats.map(() => new Set()),
         communityCards: deck.slice(rules.cardsPerPlayer * players.length, rules.cardsPerPlayer * players.length + rules.communityCards),
         communityRevealed: 0,
         communityRevealedRows: 0,
@@ -7569,6 +8087,7 @@
         contributions: seats.map(() => 0),
         pending: new Set(),
         lastAction: `${seatName(dealerIndex)} dealt B52`,
+        dealerOptions: currentDealerOptionsText(rules),
         inPlayers: new Set(),
         originalDealerIndex,
         b52PayMode: b52PayMode.value
@@ -7578,8 +8097,7 @@
         pot = 0;
         occupiedIndexes().forEach((index) => {
           const ante = Number(b52Ante.value) + (index === dealerIndex ? 1 : 0);
-          stacks[index] -= ante;
-          pot += ante;
+          pot += debitStack(index, ante);
         });
       } else {
         pot = startingPot;
@@ -7587,7 +8105,7 @@
 
       updateStacks();
       updatePot();
-      currentGame.textContent = "Current game: B52";
+      setCurrentGameDisplay("B52", handState.dealerOptions || currentDealerOptionsText(rules));
       renderAllHands();
       refreshPointBadges();
       renderCommunityCards();
@@ -7645,6 +8163,7 @@
             : rules.cardsPerPlayer * players.length,
           hands: dealtHands,
           upCards: createOpeningUpCards(rules, players),
+          discardedUpCards: seats.map(() => new Set()),
           communityCards: rules.kind === "inbetween"
             ? [null, null, null]
             : ["littlePig", "christmasTree", "omaha", "sliderPig", "b52", "grinner", "bingo", "shotgun", "cincinnati", "circle", "night"].includes(rules.kind)
@@ -7661,6 +8180,7 @@
           contributions: seats.map(() => 0),
           pending: new Set(),
           lastAction: `${seatName(dealerIndex)} dealt ${rules.name}`,
+          dealerOptions: currentDealerOptionsText(rules),
           pigStage: 0,
           lastBetStarter: dealerIndex,
           preDrawBet: Math.max(1, Number(pigPreBet.value) || 1),
@@ -7734,15 +8254,16 @@
 
         if (rules.kind === "potBlackjack") {
           pot = Math.max(1, Number(blackjackDealerWager.value) || 1);
-          stacks[dealerIndex] -= pot;
+          pot = debitStack(dealerIndex, pot);
           updateStacks();
           updatePot();
         } else {
           collectAntes(rules);
         }
-        currentGame.textContent = `Current game: ${rules.name}`;
+        setCurrentGameDisplay(rules.name, handState.dealerOptions || currentDealerOptionsText(rules));
         renderAllHands();
         refreshPointBadges();
+        await discardZeroUpCardsAfterReveal();
 
         if (rules.kind === "littlePig") {
           renderCommunityCards();
@@ -7845,7 +8366,11 @@
         return;
       }
 
-      payToCall(activeIndex);
+      if (!payToCall(activeIndex)) {
+        setTableMessage("Not enough chips.", "You cannot call this bet with your current stack.");
+        showPlayerControls();
+        return;
+      }
       advanceAfterAction();
     });
 
@@ -7854,7 +8379,11 @@
         return;
       }
 
-      raisePlayer(activeIndex, ["mariah", "followQueen", "night"].includes(handState.rules.kind) ? 1 : null);
+      if (!raisePlayer(activeIndex, ["mariah", "followQueen", "night"].includes(handState.rules.kind) ? 1 : null)) {
+        setTableMessage("Not enough chips.", "You cannot raise with your current stack.");
+        showPlayerControls();
+        return;
+      }
       advanceAfterAction();
     });
 
@@ -7863,7 +8392,11 @@
         return;
       }
 
-      raisePlayer(activeIndex, 2);
+      if (!raisePlayer(activeIndex, 2)) {
+        setTableMessage("Not enough chips.", "You cannot bet 2 with your current stack.");
+        showPlayerControls();
+        return;
+      }
       advanceAfterAction();
     });
 
@@ -8053,6 +8586,7 @@
     });
 
     nextActionButton.addEventListener("click", runSteppedAction);
+    endB52Test.addEventListener("click", endB52ForTesting);
 
     randomSeatButton.addEventListener("click", randomOpenSeat);
     addBotSeatButton.addEventListener("click", addBotSeat);
@@ -8084,6 +8618,7 @@
       finishReadyUp();
     });
 
+    renderGameChoices();
     updateRulesPreview();
     updateStepControls();
     renderSeating();
