@@ -2618,7 +2618,7 @@
       if (!isOnlineNonHost()) {
         return false;
       }
-      if (!handState || activeIndex !== userSeatIndex) {
+      if (type !== "dealGame" && (!handState || activeIndex !== userSeatIndex)) {
         return true;
       }
       await updateDoc(roomRef(), {
@@ -2644,6 +2644,22 @@
       onlineRoom.lastActionId = action.id;
       const { seatIndex, type, payload = {} } = action;
       const seat = occupiedSeats[seatIndex];
+
+      if (type === "dealGame") {
+        if (handState || !seat || seat.playerId !== action.playerId || dealerIndex !== seatIndex) {
+          await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
+          return;
+        }
+        if (gameRules[payload.gameName]) {
+          gameChoice.value = payload.gameName;
+          updateRulesPreview();
+          onlineLog("host received remote dealer game choice", { dealer: seatName(seatIndex), game: payload.gameName });
+          await dealPlayerCards();
+        }
+        await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
+        return;
+      }
+
       if (!handState || !seat || seat.playerId !== action.playerId || activeIndex !== seatIndex) {
         await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
         return;
@@ -3000,7 +3016,11 @@
         seatPicker.appendChild(button);
       });
 
-      updateDealer();
+      if (handState) {
+        updateDealerPosition();
+      } else {
+        updateDealer();
+      }
     }
 
     function takeSeat(index) {
@@ -3087,22 +3107,25 @@
       writeRoomSeats();
     }
 
-    function updateDealer(keepShowdownVisible = false) {
-      clearTimeout(autoDealTimer);
-      ensureDealerOccupied();
+    function updateDealerPosition() {
       seats.forEach((seat, index) => {
         seat.classList.toggle("dealer", index === dealerIndex);
       });
-
       const seatNumber = visualSeatNumber(dealerIndex);
       setPositionClass(dealerButton, "pos-", seatNumber);
       setPositionClass(dealerPanel, "pos-", seatNumber);
+    }
+
+    function updateDealer(keepShowdownVisible = false) {
+      clearTimeout(autoDealTimer);
+      ensureDealerOccupied();
+      updateDealerPosition();
 
       dealerPanel.classList.remove("hidden");
       currentGame.textContent = `${seatName(dealerIndex)} is dealer. Choose this hand's game.`;
       dealerOptionsLine.textContent = "";
 
-      if (onlineRoom.code && !onlineRoom.isHost) {
+      if (onlineRoom.code && !onlineRoom.isHost && !isUserSeat(dealerIndex)) {
         dealerPanel.classList.add("hidden");
         setTableMessage("Online room joined.", `Waiting for ${seatName(dealerIndex)} or the host to act.`);
         return;
@@ -3451,6 +3474,7 @@
       handState = null;
       dealerIndex = nextDealer;
       updateDealer(true);
+      writeRoomSeats();
     }
 
     function clearSeatStatus() {
@@ -8692,6 +8716,13 @@
         game: gameChoice.value
       });
       if (isOnlineNonHost()) {
+        if (isUserSeat(dealerIndex)) {
+          await sendOnlineAction("dealGame", { gameName: gameChoice.value });
+          dealerPanel.classList.add("hidden");
+          setTableMessage("Game choice sent.", "Waiting for the host to deal the shared hand.");
+          onlineLog("remote dealer sent game choice", { room: onlineRoom.code, game: gameChoice.value });
+          return;
+        }
         setTableMessage("Waiting for host.", "Only the host browser deals and advances the shared deck.");
         onlineLog("deal blocked for non-host", { room: onlineRoom.code });
         return;
