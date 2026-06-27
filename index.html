@@ -2432,7 +2432,8 @@
       isHost: false,
       playerId: null,
       unsubscribe: null,
-      applyingRemote: false
+      applyingRemote: false,
+      pauseGameSync: false
     };
 
     function loadFavoriteGames() {
@@ -2729,8 +2730,9 @@
 
     function serializeHandState() {
       if (!handState) return null;
+      const { deck, rules, ...publicHandState } = handState;
       return {
-        ...serializeForFirestore(handState),
+        ...serializeForFirestore(publicHandState),
         rulesName: handState.rules?.name || null
       };
     }
@@ -2739,6 +2741,8 @@
       if (!value) return null;
       const restored = deserializeFromFirestore(value);
       restored.rules = gameRules[restored.rulesName] || gameRules[gameChoice.value];
+      restored.deck = [];
+      restored.deckIndex = Number.isInteger(restored.deckIndex) ? restored.deckIndex : 0;
       return restored;
     }
 
@@ -2756,24 +2760,50 @@
       };
     }
 
+    async function writeGameSnapshotNow(reason = "game") {
+      if (!onlineRoom.code || !onlineRoom.isHost) {
+        return false;
+      }
+      const snapshot = currentGameSnapshot();
+      onlineLog(`${reason} snapshot write start`, {
+        room: onlineRoom.code,
+        phase: snapshot.handState?.phase || "none",
+        activeIndex: snapshot.activeIndex,
+        hasHands: Boolean(snapshot.handState?.hands)
+      });
+      try {
+        await updateDoc(roomRef(), {
+          game: snapshot,
+          updatedAt: serverTimestamp()
+        });
+        onlineLog(`${reason} snapshot written`, {
+          room: onlineRoom.code,
+          phase: snapshot.handState?.phase || "none"
+        });
+        return true;
+      } catch (error) {
+        onlineLog(`${reason} snapshot write failed`, error);
+        return false;
+      }
+    }
+
     let hostSyncTimer = null;
     function scheduleHostGameSync() {
-      if (!onlineRoom.code || !onlineRoom.isHost || onlineRoom.applyingRemote) return;
+      if (!onlineRoom.code || !onlineRoom.isHost || onlineRoom.applyingRemote || onlineRoom.pauseGameSync) return;
       clearTimeout(hostSyncTimer);
       hostSyncTimer = setTimeout(async () => {
-        await updateDoc(roomRef(), {
-          game: currentGameSnapshot(),
-          updatedAt: serverTimestamp()
-        }).then(() => {
-          onlineLog("game write success", { room: onlineRoom.code, phase: handState?.phase || "none" });
-        }).catch((error) => {
-          onlineLog("game write failure", error);
-        });
+        await writeGameSnapshotNow("scheduled game");
       }, 180);
     }
 
     function applyGameSnapshot(game) {
       if (!game || onlineRoom.isHost) return;
+      onlineLog("snapshot received by remote client", {
+        room: onlineRoom.code,
+        phase: game.handState?.phase || "none",
+        activeIndex: game.activeIndex,
+        hasHands: Boolean(game.handState?.hands)
+      });
       onlineRoom.applyingRemote = true;
       pot = game.pot || 0;
       dealerIndex = Number.isInteger(game.dealerIndex) ? game.dealerIndex : dealerIndex;
@@ -2786,6 +2816,9 @@
       currentGame.textContent = game.currentGameText || currentGame.textContent;
       dealerOptionsLine.textContent = game.dealerOptionsText || "";
       roundInfo.innerHTML = game.roundInfoHtml || roundInfo.innerHTML;
+      if (handState) {
+        dealerPanel.classList.add("hidden");
+      }
       updatePot();
       renderSeating();
       renderAllHands();
@@ -2797,6 +2830,11 @@
         hideActionPanels();
       }
       onlineRoom.applyingRemote = false;
+      onlineLog("remote render complete", {
+        room: onlineRoom.code,
+        phase: handState?.phase || "none",
+        cardsVisible: Boolean(handState?.hands?.[userSeatIndex])
+      });
     }
 
     function renderGameChoices(preferredGame = gameChoice.value || gameNames[0]) {
@@ -8575,9 +8613,9 @@
       const startingPot = pot;
 
       if (!preservePot) {
+        onlineRoom.pauseGameSync = Boolean(onlineRoom.code && onlineRoom.isHost);
         resetTableForDeal();
         setSeatingLocked(true);
-        dealerPanel.classList.add("hidden");
       }
 
       addActionLog(`${seatName(dealerIndex)} deals B52 to ${players.length} players.`, true);
@@ -8628,14 +8666,15 @@
       renderCommunityCards();
       startB52DeclarePhase();
       if (onlineRoom.code && onlineRoom.isHost) {
-        await updateDoc(roomRef(), {
-          game: currentGameSnapshot(),
-          updatedAt: serverTimestamp()
-        }).then(() => {
-          onlineLog("deal game write success", { room: onlineRoom.code, game: "B52" });
-        }).catch((error) => {
-          onlineLog("deal game write failure", error);
-        });
+        const wrote = await writeGameSnapshotNow("deal");
+        onlineRoom.pauseGameSync = false;
+        if (wrote) {
+          dealerPanel.classList.add("hidden");
+          onlineLog("dealer menu closed", { room: onlineRoom.code, game: "B52" });
+        }
+      } else {
+        onlineRoom.pauseGameSync = false;
+        dealerPanel.classList.add("hidden");
       }
     }
 
@@ -8679,9 +8718,9 @@
         await startB52Deal(rules, dealerIndex, false);
         return;
       }
+      onlineRoom.pauseGameSync = Boolean(onlineRoom.code && onlineRoom.isHost);
       resetTableForDeal();
       setSeatingLocked(true);
-      dealerPanel.classList.add("hidden");
       addActionLog(`${seatName(dealerIndex)} deals ${rules.name} to ${players.length} players.`, true);
 
       if (rules) {
@@ -8887,18 +8926,20 @@
         } else {
           startInitialBettingRound("Opening deal complete");
         }
-        scheduleHostGameSync();
         if (onlineRoom.code && onlineRoom.isHost) {
-          await updateDoc(roomRef(), {
-            game: currentGameSnapshot(),
-            updatedAt: serverTimestamp()
-          }).then(() => {
-            onlineLog("deal game write success", { room: onlineRoom.code, game: rules.name });
-          }).catch((error) => {
-            onlineLog("deal game write failure", error);
-          });
+          const wrote = await writeGameSnapshotNow("deal");
+          onlineRoom.pauseGameSync = false;
+          if (wrote) {
+            dealerPanel.classList.add("hidden");
+            onlineLog("dealer menu closed", { room: onlineRoom.code, game: rules.name });
+          } else {
+            setTableMessage("Online deal failed.", "Game snapshot was not written. Check the console.");
+          }
+        } else {
+          dealerPanel.classList.add("hidden");
         }
       } else {
+        onlineRoom.pauseGameSync = false;
         handState = null;
         setSeatingLocked(false);
         clearSeatStatus();
