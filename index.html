@@ -1789,6 +1789,7 @@
       onSnapshot,
       serverTimestamp,
       setDoc,
+      arrayUnion,
       updateDoc
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
@@ -2462,6 +2463,14 @@
       return newId;
     }
 
+    function onlineLog(message, detail = null) {
+      if (detail === null) {
+        console.log(`[Riverforge Online] ${message}`);
+      } else {
+        console.log(`[Riverforge Online] ${message}`, detail);
+      }
+    }
+
     function hasFirebaseConfig() {
       return Boolean(
         firebaseConfig.apiKey
@@ -2484,11 +2493,17 @@
       leaveRoomButton.disabled = !configured || !inRoom;
       addBotSeatButton.disabled = handState || (inRoom && !onlineRoom.isHost);
       removeBotSeatButton.disabled = handState || (inRoom && !onlineRoom.isHost);
+      dealTestCards.disabled = Boolean(inRoom && !onlineRoom.isHost);
       onlineStatus.textContent = inRoom
         ? `${onlineRoom.isHost ? "Hosting" : "Joined"} room ${onlineRoom.code}. Pick an open or bot seat.`
         : configured
         ? "Firebase is connected. Create or join a room, then pick a seat."
         : "Firebase is not configured yet. Local play is still active.";
+      onlineLog("control state", {
+        room: onlineRoom.code,
+        isHost: onlineRoom.isHost,
+        dealDisabled: dealTestCards.disabled
+      });
     }
 
     function onlineDisplayName() {
@@ -2519,6 +2534,7 @@
     function applyRoomData(data) {
       if (!data?.seats) return;
       onlineRoom.applyingRemote = true;
+      onlineRoom.isHost = data.hostId === (onlineRoom.playerId || getOnlinePlayerId());
       const playerId = onlineRoom.playerId || getOnlinePlayerId();
       occupiedSeats = data.seats.map((seat) => {
         if (!seat) return null;
@@ -2544,7 +2560,16 @@
       }
       renderSeating();
       updateStacks();
+      renderOnlineChat(data.chatMessages || []);
       onlineRoom.applyingRemote = false;
+    }
+
+    function renderOnlineChat(messages) {
+      if (!onlineRoom.code || !Array.isArray(messages)) return;
+      chatLog.innerHTML = "";
+      messages
+        .slice(-40)
+        .forEach((entry) => appendChatMessage(entry.name || "Player", entry.message || ""));
     }
 
     function subscribeToRoom(code) {
@@ -2552,9 +2577,16 @@
       onlineRoom.unsubscribe = onSnapshot(roomRef(code), (snapshot) => {
         if (!snapshot.exists()) {
           onlineStatus.textContent = "That room no longer exists.";
+          onlineLog("room snapshot missing", { code });
           return;
         }
         const data = snapshot.data();
+        onlineLog("room snapshot received", {
+          code,
+          hostId: data.hostId,
+          playerId: onlineRoom.playerId,
+          isHost: data.hostId === onlineRoom.playerId
+        });
         applyRoomData(data);
         if (onlineRoom.isHost) {
           applyOnlineAction(data.pendingAction);
@@ -2571,7 +2603,13 @@
         seats: serializeSeatsForRoom(),
         stacks,
         dealerIndex,
+        game: currentGameSnapshot(),
         updatedAt: serverTimestamp()
+      }).then(() => {
+        onlineLog("seats write success", { room: onlineRoom.code });
+      }).catch((error) => {
+        onlineLog("seats write failure", error);
+        throw error;
       });
     }
 
@@ -2726,6 +2764,10 @@
         await updateDoc(roomRef(), {
           game: currentGameSnapshot(),
           updatedAt: serverTimestamp()
+        }).then(() => {
+          onlineLog("game write success", { room: onlineRoom.code, phase: handState?.phase || "none" });
+        }).catch((error) => {
+          onlineLog("game write failure", error);
         });
       }, 180);
     }
@@ -2857,6 +2899,13 @@
       return Boolean(onlineRoom.code && !onlineRoom.isHost);
     }
 
+    function visualSeatNumber(index) {
+      if (!onlineRoom.code || userSeatIndex === null || userSeatIndex < 0) {
+        return index + 1;
+      }
+      return ((index - userSeatIndex + 4 + seats.length) % seats.length) + 1;
+    }
+
     function nextOccupiedIndex(fromIndex) {
       const occupied = occupiedIndexes();
       if (occupied.length === 0) {
@@ -2885,6 +2934,7 @@
       ensureDealerOccupied();
       seats.forEach((seat, index) => {
         const occupant = occupiedSeats[index];
+        setPositionClass(seat, "seat-", visualSeatNumber(index));
         seat.classList.toggle("empty", !occupant);
         seat.classList.toggle("you", occupant?.type === "user");
         seat.querySelector(".seat-name").textContent = occupant?.name ?? `Seat ${index + 1}`;
@@ -2999,7 +3049,7 @@
         seat.classList.toggle("dealer", index === dealerIndex);
       });
 
-      const seatNumber = dealerIndex + 1;
+      const seatNumber = visualSeatNumber(dealerIndex);
       setPositionClass(dealerButton, "pos-", seatNumber);
       setPositionClass(dealerPanel, "pos-", seatNumber);
 
@@ -8577,11 +8627,27 @@
       refreshPointBadges();
       renderCommunityCards();
       startB52DeclarePhase();
+      if (onlineRoom.code && onlineRoom.isHost) {
+        await updateDoc(roomRef(), {
+          game: currentGameSnapshot(),
+          updatedAt: serverTimestamp()
+        }).then(() => {
+          onlineLog("deal game write success", { room: onlineRoom.code, game: "B52" });
+        }).catch((error) => {
+          onlineLog("deal game write failure", error);
+        });
+      }
     }
 
     async function dealPlayerCards() {
+      onlineLog("deal clicked", {
+        room: onlineRoom.code,
+        isHost: onlineRoom.isHost,
+        game: gameChoice.value
+      });
       if (isOnlineNonHost()) {
         setTableMessage("Waiting for host.", "Only the host browser deals and advances the shared deck.");
+        onlineLog("deal blocked for non-host", { room: onlineRoom.code });
         return;
       }
 
@@ -8822,6 +8888,16 @@
           startInitialBettingRound("Opening deal complete");
         }
         scheduleHostGameSync();
+        if (onlineRoom.code && onlineRoom.isHost) {
+          await updateDoc(roomRef(), {
+            game: currentGameSnapshot(),
+            updatedAt: serverTimestamp()
+          }).then(() => {
+            onlineLog("deal game write success", { room: onlineRoom.code, game: rules.name });
+          }).catch((error) => {
+            onlineLog("deal game write failure", error);
+          });
+        }
       } else {
         handState = null;
         setSeatingLocked(false);
@@ -9107,12 +9183,21 @@
         seats: serializeSeatsForRoom(),
         stacks,
         dealerIndex,
+        game: currentGameSnapshot(),
+        chatMessages: [],
+        pendingAction: null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
+      }).then(() => {
+        onlineLog("create room success", { code, playerId: onlineRoom.playerId, isHost: onlineRoom.isHost });
+      }).catch((error) => {
+        onlineLog("create room failure", error);
+        throw error;
       });
       subscribeToRoom(code);
       onlinePanel.classList.add("visible");
       updateOnlineControls();
+      dealTestCards.disabled = false;
       addActionLog(`Online room ${code} created.`, true);
     });
     joinRoomButton.addEventListener("click", async () => {
@@ -9124,10 +9209,12 @@
       const snapshot = await getDoc(roomRef(code));
       if (!snapshot.exists()) {
         onlineStatus.textContent = `Room ${code} was not found.`;
+        onlineLog("join room not found", { code });
         return;
       }
       onlineRoom.code = code;
       onlineRoom.isHost = snapshot.data().hostId === onlineRoom.playerId;
+      onlineLog("join room success", { code, playerId: onlineRoom.playerId, isHost: onlineRoom.isHost });
       subscribeToRoom(code);
       onlinePanel.classList.add("visible");
       updateOnlineControls();
@@ -9157,10 +9244,30 @@
       }
     });
 
-    chatForm.addEventListener("submit", (event) => {
+    chatForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const message = chatInput.value.trim();
       if (!message) {
+        return;
+      }
+
+      if (onlineRoom.code) {
+        await updateDoc(roomRef(), {
+          chatMessages: arrayUnion({
+            id: `${onlineRoom.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            playerId: onlineRoom.playerId,
+            name: onlineDisplayName(),
+            message,
+            createdAt: Date.now()
+          }),
+          updatedAt: serverTimestamp()
+        }).then(() => {
+          onlineLog("chat send success", { room: onlineRoom.code, message });
+          chatInput.value = "";
+        }).catch((error) => {
+          onlineLog("chat send failure", error);
+          setTableMessage("Chat failed.", "Check Firestore rules and the browser console.");
+        });
         return;
       }
 
