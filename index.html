@@ -2624,11 +2624,13 @@
       if (!isOnlineNonHost()) {
         return false;
       }
-      if (type !== "dealGame" && (!handState || activeIndex !== userSeatIndex)) {
+      if (type !== "dealGame" && (!handState || (activeIndex !== userSeatIndex && !hasPendingUserChoice()))) {
         onlineLog("remote action ignored locally", {
           type,
           activeIndex,
           userSeatIndex,
+          phase: handState?.phase || "none",
+          hasPendingUserChoice: hasPendingUserChoice(),
           hasHand: Boolean(handState)
         });
         return true;
@@ -2720,12 +2722,18 @@
         return;
       }
 
-      if (!handState || !seat || seat.type === "bot" || activeIndex !== seatIndex) {
+      const acceptsPendingChoice = Boolean(
+        handState
+        && ["pigReveal", "pigDeclare"].includes(handState.phase)
+        && handState.pending?.has?.(seatIndex)
+      );
+      if (!handState || !seat || seat.type === "bot" || (activeIndex !== seatIndex && !acceptsPendingChoice)) {
         onlineLog("host rejected player action", {
-          reason: !handState ? "no hand" : !seat ? "no seat" : seat.type === "bot" ? "bot seat" : activeIndex !== seatIndex ? "not active seat" : "unknown",
+          reason: !handState ? "no hand" : !seat ? "no seat" : seat.type === "bot" ? "bot seat" : activeIndex !== seatIndex && !acceptsPendingChoice ? "not active seat" : "unknown",
           action,
           seat,
           activeIndex,
+          acceptsPendingChoice,
           phase: handState?.phase || "none"
         });
         await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
@@ -2765,6 +2773,11 @@
       } else if (handState.phase === "pigDeclare") {
         if (type === "declareLow" || type === "declareHigh" || type === "declareBoth") {
           declareLittlePig(seatIndex, type.replace("declare", "").toLowerCase());
+        }
+      } else if (handState.phase === "pigReveal") {
+        if (type === "revealCard" && Number.isInteger(payload.cardIndex)) {
+          revealLittlePigCard(seatIndex, payload.cardIndex);
+          finishLittlePigRevealIfReady();
         }
       } else if (handState.phase === "b52Draw") {
         if (type === "drawCards") {
@@ -2957,7 +2970,7 @@
       renderAllHands();
       renderCommunityCards();
       refreshPointBadges();
-      if (handState && activeIndex === userSeatIndex) {
+      if (handState && (activeIndex === userSeatIndex || hasPendingUserChoice())) {
         showPlayerControls();
       } else {
         hideActionPanels();
@@ -3068,6 +3081,14 @@
 
     function isOnlineNonHost() {
       return Boolean(onlineRoom.code && !onlineRoom.isHost);
+    }
+
+    function hasPendingUserChoice() {
+      return Boolean(
+        handState
+        && handState.pending?.has?.(userSeatIndex)
+        && ["pigReveal", "pigDeclare"].includes(handState.phase)
+      );
     }
 
     function visualSeatNumber(index) {
@@ -5187,7 +5208,7 @@
       addActionLog(`Little Pig reveal ${revealCount} begins.`, true);
 
       activePlayerIndexes().forEach((index) => {
-        if (!isUserSeat(index)) {
+        if (occupiedSeats[index]?.type === "bot") {
           const hiddenIndexes = handState.hands[index]
             .map((_, cardIndex) => cardIndex)
             .filter((cardIndex) => !handState.upCards[index].has(cardIndex));
@@ -5228,7 +5249,7 @@
       addActionLog("Little Pig declarations begin.", true);
 
       activePlayerIndexes().forEach((index) => {
-        if (!isUserSeat(index)) {
+        if (occupiedSeats[index]?.type === "bot") {
           handState.declarations[index] = ["low", "high", "both"][Math.floor(Math.random() * 3)];
           handState.pending.delete(index);
           addActionLog(`${seatName(index)} declared.`);
@@ -5338,7 +5359,7 @@
     function showPlayerControls() {
       hideActionPanels();
 
-      if (!handState || !isUserSeat(activeIndex)) {
+      if (!handState || (!isUserSeat(activeIndex) && !hasPendingUserChoice())) {
         return;
       }
 
@@ -5550,6 +5571,9 @@
         }
 
         const handCards = handState.hands[seatIndex];
+        handCards.forEach((_, cardIndex) => {
+          handState.upCards[seatIndex].add(cardIndex);
+        });
         const hand = seats[seatIndex].querySelector(".hand");
         hand.innerHTML = "";
         seats[seatIndex].querySelector(".discard-pile")?.remove();
@@ -9183,13 +9207,19 @@
       }
     });
 
-    rollButton.addEventListener("click", () => {
+    rollButton.addEventListener("click", async () => {
       if (
         handState
         && handState.phase === "pigReveal"
         && handState.pending.has(userSeatIndex)
         && selectedRollCardIndex !== null
       ) {
+        if (await sendOnlineAction("revealCard", { cardIndex: selectedRollCardIndex })) {
+          selectedRollCardIndex = null;
+          rollButton.textContent = "Roll";
+          rollButton.disabled = true;
+          return;
+        }
         revealLittlePigCard(userSeatIndex, selectedRollCardIndex);
         selectedRollCardIndex = null;
         rollButton.textContent = "Roll";
