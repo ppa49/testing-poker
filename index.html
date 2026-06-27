@@ -2658,6 +2658,26 @@
       return true;
     }
 
+    function collectDealerPanelValues() {
+      return [...dealerPanel.querySelectorAll("input, select")].reduce((values, control) => {
+        if (!control.id) return values;
+        values[control.id] = control.type === "checkbox" ? control.checked : control.value;
+        return values;
+      }, {});
+    }
+
+    function applyDealerPanelValues(values = {}) {
+      Object.entries(values).forEach(([id, value]) => {
+        const control = document.getElementById(id);
+        if (!control) return;
+        if (control.type === "checkbox") {
+          control.checked = Boolean(value);
+        } else {
+          control.value = value;
+        }
+      });
+    }
+
     async function applyOnlineAction(action) {
       if (!onlineRoom.isHost || !action || action.id === onlineRoom.lastActionId) {
         return;
@@ -2673,9 +2693,12 @@
       });
 
       if (type === "dealGame") {
-        if (handState || !seat || seat.playerId !== action.playerId || dealerIndex !== seatIndex) {
+        const handStillActive = handState && handState.phase !== "readyUp";
+        const playerMatches = !seat?.playerId || seat.playerId === action.playerId;
+        if (handStillActive || !seat || !playerMatches || dealerIndex !== seatIndex) {
           onlineLog("host rejected dealGame action", {
             hasHand: Boolean(handState),
+            phase: handState?.phase || "none",
             seat,
             dealerIndex,
             seatIndex,
@@ -2685,6 +2708,9 @@
           return;
         }
         if (gameRules[payload.gameName]) {
+          handState = null;
+          hideActionPanels();
+          applyDealerPanelValues(payload.dealerSettings);
           gameChoice.value = payload.gameName;
           updateRulesPreview();
           onlineLog("host received remote dealer game choice", { dealer: seatName(seatIndex), game: payload.gameName });
@@ -2724,6 +2750,35 @@
           await computerHit(seatIndex);
         } else if (type === "stay") {
           stayPlayer(seatIndex);
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "b52Declare") {
+        if (type === "declareIn" || type === "declareOut") {
+          b52Declare(seatIndex, type === "declareIn");
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "fiveTenDeclare") {
+        if (type === "declareIn" || type === "declareOut") {
+          fiveTenDeclare(seatIndex, type === "declareIn");
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "pigDeclare") {
+        if (type === "declareLow" || type === "declareHigh" || type === "declareBoth") {
+          declareLittlePig(seatIndex, type.replace("declare", "").toLowerCase());
+        }
+      } else if (handState.phase === "b52Draw") {
+        if (type === "drawCards") {
+          b52DrawPlayer(seatIndex, new Set(payload.cardIndexes || []));
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw") {
+        if (type === "drawCards") {
+          drawSameCountPlayer(seatIndex, new Set(payload.cardIndexes || []));
+          advanceAfterAction();
+        }
+      } else if (handState.phase === "pigDraw") {
+        if (type === "drawCards") {
+          littlePigDrawPlayer(seatIndex, new Set(payload.cardIndexes || []));
           advanceAfterAction();
         }
       }
@@ -8772,7 +8827,10 @@
       });
       if (isOnlineNonHost()) {
         if (isUserSeat(dealerIndex)) {
-          await sendOnlineAction("dealGame", { gameName: gameChoice.value });
+          await sendOnlineAction("dealGame", {
+            gameName: gameChoice.value,
+            dealerSettings: collectDealerPanelValues()
+          });
           dealerPanel.classList.add("hidden");
           setTableMessage("Game choice sent.", "Waiting for the host to deal the shared hand.");
           onlineLog("remote dealer sent game choice", { room: onlineRoom.code, game: gameChoice.value });
@@ -9155,8 +9213,14 @@
       finishRollPhaseIfReady();
     });
 
-    pigDrawButton.addEventListener("click", () => {
+    pigDrawButton.addEventListener("click", async () => {
       if (!handState || !handState.pending.has(userSeatIndex)) {
+        return;
+      }
+
+      if (await sendOnlineAction("drawCards", { cardIndexes: [...selectedPigCards] })) {
+        selectedPigCards = new Set();
+        pigDrawButton.disabled = true;
         return;
       }
 
@@ -9174,11 +9238,21 @@
       advanceAfterAction();
     });
 
-    declareLow.addEventListener("click", () => declareLittlePig(userSeatIndex, "low"));
-    declareHigh.addEventListener("click", () => declareLittlePig(userSeatIndex, "high"));
-    declareBoth.addEventListener("click", () => declareLittlePig(userSeatIndex, "both"));
-    declareIn.addEventListener("click", () => {
+    declareLow.addEventListener("click", async () => {
+      if (await sendOnlineAction("declareLow")) return;
+      declareLittlePig(userSeatIndex, "low");
+    });
+    declareHigh.addEventListener("click", async () => {
+      if (await sendOnlineAction("declareHigh")) return;
+      declareLittlePig(userSeatIndex, "high");
+    });
+    declareBoth.addEventListener("click", async () => {
+      if (await sendOnlineAction("declareBoth")) return;
+      declareLittlePig(userSeatIndex, "both");
+    });
+    declareIn.addEventListener("click", async () => {
       if (!handState || !["b52Declare", "fiveTenDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
+      if (await sendOnlineAction("declareIn")) return;
       if (handState.phase === "fiveTenDeclare") {
         fiveTenDeclare(userSeatIndex, true);
       } else {
@@ -9186,8 +9260,9 @@
       }
       advanceAfterAction();
     });
-    declareOut.addEventListener("click", () => {
+    declareOut.addEventListener("click", async () => {
       if (!handState || !["b52Declare", "fiveTenDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
+      if (await sendOnlineAction("declareOut")) return;
       if (handState.phase === "fiveTenDeclare") {
         fiveTenDeclare(userSeatIndex, false);
       } else {
