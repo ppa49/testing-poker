@@ -2586,7 +2586,13 @@
           code,
           hostId: data.hostId,
           playerId: onlineRoom.playerId,
-          isHost: data.hostId === onlineRoom.playerId
+          isHost: data.hostId === onlineRoom.playerId,
+          pendingAction: data.pendingAction ? {
+            id: data.pendingAction.id,
+            type: data.pendingAction.type,
+            seatIndex: data.pendingAction.seatIndex,
+            playerId: data.pendingAction.playerId
+          } : null
         });
         applyRoomData(data);
         if (onlineRoom.isHost) {
@@ -2619,19 +2625,34 @@
         return false;
       }
       if (type !== "dealGame" && (!handState || activeIndex !== userSeatIndex)) {
+        onlineLog("remote action ignored locally", {
+          type,
+          activeIndex,
+          userSeatIndex,
+          hasHand: Boolean(handState)
+        });
         return true;
       }
-      await updateDoc(roomRef(), {
-        pendingAction: {
-          id: `${onlineRoom.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          playerId: onlineRoom.playerId,
-          seatIndex: userSeatIndex,
-          type,
-          payload,
-          createdAt: Date.now()
-        },
-        updatedAt: serverTimestamp()
-      });
+      const action = {
+        id: `${onlineRoom.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        playerId: onlineRoom.playerId,
+        seatIndex: userSeatIndex,
+        type,
+        payload,
+        createdAt: Date.now()
+      };
+      onlineLog("remote action send start", action);
+      try {
+        await updateDoc(roomRef(), {
+          pendingAction: action,
+          updatedAt: serverTimestamp()
+        });
+        onlineLog("remote action send success", action);
+      } catch (error) {
+        onlineLog("remote action send failure", error);
+        setTableMessage("Action failed.", error?.message || "Could not send action to host.");
+        return true;
+      }
       setTableMessage("Action sent.", "Waiting for the host to apply it.");
       hideActionPanels();
       return true;
@@ -2644,9 +2665,22 @@
       onlineRoom.lastActionId = action.id;
       const { seatIndex, type, payload = {} } = action;
       const seat = occupiedSeats[seatIndex];
+      onlineLog("host received pending action", {
+        action,
+        seat,
+        activeIndex,
+        phase: handState?.phase || "none"
+      });
 
       if (type === "dealGame") {
         if (handState || !seat || seat.playerId !== action.playerId || dealerIndex !== seatIndex) {
+          onlineLog("host rejected dealGame action", {
+            hasHand: Boolean(handState),
+            seat,
+            dealerIndex,
+            seatIndex,
+            actionPlayerId: action.playerId
+          });
           await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
           return;
         }
@@ -2660,7 +2694,14 @@
         return;
       }
 
-      if (!handState || !seat || seat.playerId !== action.playerId || activeIndex !== seatIndex) {
+      if (!handState || !seat || seat.type === "bot" || activeIndex !== seatIndex) {
+        onlineLog("host rejected player action", {
+          reason: !handState ? "no hand" : !seat ? "no seat" : seat.type === "bot" ? "bot seat" : activeIndex !== seatIndex ? "not active seat" : "unknown",
+          action,
+          seat,
+          activeIndex,
+          phase: handState?.phase || "none"
+        });
         await updateDoc(roomRef(), { pendingAction: null, updatedAt: serverTimestamp() });
         return;
       }
@@ -2687,11 +2728,25 @@
         }
       }
 
-      await updateDoc(roomRef(), {
-        pendingAction: null,
-        game: currentGameSnapshot(),
-        updatedAt: serverTimestamp()
-      });
+      if (handState && activeIndex !== null) {
+        onlineLog("host refreshed next action after remote action", {
+          activeIndex,
+          activeSeat: seatName(activeIndex),
+          phase: handState.phase
+        });
+        scheduleNextAction(0);
+      }
+
+      try {
+        await updateDoc(roomRef(), {
+          pendingAction: null,
+          game: currentGameSnapshot(),
+          updatedAt: serverTimestamp()
+        });
+        onlineLog("host applied action and wrote game", { type, seatIndex, phase: handState?.phase || "none" });
+      } catch (error) {
+        onlineLog("host action game write failure", error);
+      }
     }
 
     function restoreLocalTable() {
