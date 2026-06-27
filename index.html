@@ -908,10 +908,11 @@
     .seat::before {
       content: attr(data-points);
       position: absolute;
-      top: -17px;
+      top: -20px;
       left: 50%;
       min-width: 42px;
-      height: 22px;
+      max-width: 132px;
+      min-height: 22px;
       display: grid;
       place-items: center;
       padding: 0 7px;
@@ -919,9 +920,12 @@
       background: var(--chip);
       border: 3px solid #f4f0e8;
       color: #fff8df;
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 900;
       line-height: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transform: translateX(-50%);
       box-shadow: 0 0 0 3px #aa2f39;
     }
@@ -2742,8 +2746,9 @@
 
       if (handState.phase === "betting") {
         if (type === "call" || type === "check") {
-          payToCall(seatIndex);
-          advanceAfterAction();
+          if (payToCall(seatIndex)) {
+            advanceAfterAction();
+          }
         } else if (type === "raise" || type === "bet") {
           if (!raisePlayer(seatIndex, payload.unit ?? null)) {
             payToCall(seatIndex);
@@ -3314,10 +3319,10 @@
     function currentDealerOptionsText(rules) {
       if (!rules) return "";
       if (!rules.kind && Number.isFinite(rules.betThreshold)) {
-        return `Forced bet ${rules.openingBet}; ${rules.openingBetAtFourteen} when showing ${rules.betThreshold}+`;
+        return `Opening bet ${rules.openingBet}; ${rules.openingBetAtFourteen} when showing ${rules.betThreshold}+`;
       }
       if (!rules.kind) {
-        return `Forced bet ${rules.openingBet}; max raises ${rules.maxRaises}`;
+        return `Opening bet ${rules.openingBet}; max raises ${rules.maxRaises}`;
       }
 
       if (rules.kind === "littlePig") {
@@ -4068,7 +4073,14 @@
     }
 
     function openingBetForShowingTotal(rules, showingTotal) {
-      return showingTotal >= rules.betThreshold ? rules.openingBetAtFourteen : rules.openingBet;
+      if (handState?.betBumpLocked) {
+        return rules.openingBetAtFourteen;
+      }
+      const thresholdHit = Number.isFinite(rules.betThreshold) && showingTotal >= rules.betThreshold;
+      if (thresholdHit && rules.openingBetAtFourteen > rules.openingBet && handState) {
+        handState.betBumpLocked = true;
+      }
+      return thresholdHit ? rules.openingBetAtFourteen : rules.openingBet;
     }
 
     function buildDeck() {
@@ -4291,19 +4303,12 @@
       updatePot();
     }
 
-    function updatePointBadges(dealtHands, rules) {
-      seats.forEach((seat, index) => {
-        if (!dealtHands || !rules || ["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen"].includes(rules.kind) || !isOccupied(index)) {
-          seat.dataset.points = "";
-          return;
-        }
-
-        const visibleCards = isUserSeat(index)
-          ? dealtHands[index]
-          : publicCardsForSeat(dealtHands, index, handState?.upCards || createOpeningUpCards(rules, occupiedIndexes()));
-
-        seat.dataset.points = formatPointTotal(visibleCards, rules);
-      });
+    function canSeeFullSeatHand(index) {
+      return Boolean(
+        isUserSeat(index)
+        || handState?.phase === "readyUp"
+        || handState?.hands?.[index]?.every((_, cardIndex) => handState.upCards?.[index]?.has(cardIndex))
+      );
     }
 
     function visibleCardsForSeat(index) {
@@ -4311,9 +4316,168 @@
         return [];
       }
 
-      return isUserSeat(index)
+      return canSeeFullSeatHand(index)
         ? visibleScoringCards(index)
         : publicCardsForSeat(handState.hands, index, handState.upCards);
+    }
+
+    function badgeHoleCards(index) {
+      if (!handState?.hands?.[index]) return [];
+      return canSeeFullSeatHand(index)
+        ? handState.hands[index].filter((_, cardIndex) => !isVisuallyDiscardedCard(index, cardIndex))
+        : publicCardsForSeat(handState.hands, index, handState.upCards);
+    }
+
+    function visibleBoardCardsForBadge() {
+      if (!handState?.communityCards) return [];
+      const kind = handState.rules.kind;
+      if (kind === "christmasTree") {
+        let count = 0;
+        for (let row = 0; row < (handState.communityRevealedRows || 0); row += 1) {
+          count += row + 1;
+        }
+        return handState.communityCards.slice(0, count);
+      }
+      if (kind === "circle") {
+        return handState.communityCards.filter((_, cardIndex) => handState.communityRevealedSet?.has(cardIndex));
+      }
+      return handState.communityCards.slice(0, handState.communityRevealed || 0);
+    }
+
+    function rankShort(value) {
+      return { 14: "A", 13: "K", 12: "Q", 11: "J", 10: "T", 1: "A" }[value] || String(value);
+    }
+
+    function highBadgeName(score) {
+      if (!score) return "";
+      const [category, primary, secondary] = score;
+      const names = [
+        () => `${rankShort(primary)} hi`,
+        () => `P ${rankShort(primary)}`,
+        () => `2P ${rankShort(primary)}/${rankShort(secondary)}`,
+        () => `3K ${rankShort(primary)}`,
+        () => `St ${rankShort(primary)}`,
+        () => `Fl ${rankShort(primary)}`,
+        () => `FH ${rankShort(primary)}/${rankShort(secondary)}`,
+        () => `4K ${rankShort(primary)}`,
+        () => `SF ${rankShort(primary)}`,
+        () => `5K ${rankShort(primary)}`
+      ];
+      return names[category]?.() || highHandName(score);
+    }
+
+    function lowBadgeName(score) {
+      if (!score || score[0] !== 0) return "";
+      return score.slice(1).map(rankShort).join("");
+    }
+
+    function safeHighBadge(cards, evaluator = evaluateHigh) {
+      return cards.length >= 5 ? highBadgeName(evaluator(cards)) : "";
+    }
+
+    function safeLowBadge(cards, evaluator = evaluateLow) {
+      return cards.length >= 5 ? lowBadgeName(evaluator(cards)) : "";
+    }
+
+    function splitBadge(low, high) {
+      return [low ? `L:${low}` : "", high ? `H:${high}` : ""].filter(Boolean).join(" ");
+    }
+
+    function badgeLabelForSeat(index) {
+      if (!handState || !isOccupied(index) || handState.folded[index]) return "";
+      const rules = handState.rules;
+      const kind = rules.kind;
+      const hole = badgeHoleCards(index);
+      const board = visibleBoardCardsForBadge();
+      const allVisible = [...hole, ...board];
+
+      if (!kind) {
+        return formatPointTotal(visibleCardsForSeat(index), rules);
+      }
+
+      if (kind === "bingo" || kind === "shotgun") {
+        if (!canSeeFullSeatHand(index)) return "";
+        const totals = bingoRemainingTotals(index);
+        return totals.length ? `Pts ${totals.join("/")}` : "Pts 0";
+      }
+
+      if (kind === "b52") {
+        return hole.length >= 5 ? `H:${highBadgeName(evaluateB52(hole))}` : "";
+      }
+
+      if (kind === "littlePig") {
+        return splitBadge(safeLowBadge(allVisible), safeHighBadge(allVisible));
+      }
+
+      if (kind === "christmasTree") {
+        if (!canSeeFullSeatHand(index) || handState.communityRevealedRows < 4) return "";
+        const low = bestTreeLow(index);
+        const high = bestTreeHigh(index);
+        return splitBadge(low ? lowBadgeName(low) : "", highBadgeName(high));
+      }
+
+      if (kind === "omaha") {
+        if (!canSeeFullSeatHand(index) || board.length < 3) return "";
+        const visibleCandidates = combinations(hole, 2).flatMap((holeCards) => (
+          combinations(board, 3).map((boardCards) => [...holeCards, ...boardCards])
+        ));
+        const high = visibleCandidates.map(evaluateHighFive).sort((a, b) => compareScore(b, a))[0];
+        const low = rules.highLow
+          ? visibleCandidates.map(evaluateOmahaLowFive).filter(Boolean).sort(compareScore)[0] || null
+          : null;
+        return splitBadge(low ? lowBadgeName(low) : "", highBadgeName(high));
+      }
+
+      if (kind === "sliderPig") {
+        if (!canSeeFullSeatHand(index) || (handState.communityRevealed || 0) < 4) return "";
+        const low = bestSliderPigLow(index);
+        return splitBadge(low ? lowBadgeName(low) : "", highBadgeName(bestSliderPigHigh(index)));
+      }
+
+      if (kind === "fiveTen") {
+        const suitScore = canSeeFullSeatHand(index) ? fiveTenSuitScore(index) : null;
+        const suitText = suitScore === null ? "" : `${handState.fiveTenDirection[0].toUpperCase()}${rankShort(suitScore)}`;
+        return [suitText, hole.length >= 5 ? `H:${highBadgeName(evaluateHighFive(hole))}` : ""].filter(Boolean).join(" ");
+      }
+
+      if (kind === "grinner") {
+        return `H:${safeHighBadge(allVisible)}`;
+      }
+
+      if (kind === "cincinnati") {
+        return `H:${safeHighBadge(allVisible)}`;
+      }
+
+      if (kind === "circle") {
+        if (!canSeeFullSeatHand(index) || (handState.communityRevealedSet?.size || 0) < 8) return "";
+        return `H:${highBadgeName(bestCircleHigh(index))}`;
+      }
+
+      if (kind === "mariah" || kind === "followQueen") {
+        const high = hole.length >= 5 ? highBadgeName(evaluateHighWithWildRanks(hole, studWildRanks())) : highBadgeName(evaluateShowingCards(publicMariahCards(index)));
+        const low = kind === "mariah" && canSeeFullSeatHand(index) && lowSpadeScore(index) !== null ? `S${rankShort(lowSpadeScore(index))}` : "";
+        return [low, high ? `H:${high}` : ""].filter(Boolean).join(" ");
+      }
+
+      if (kind === "night") {
+        return hole.length >= 5 ? `H:${highBadgeName(evaluateHighWithWildRanks(hole, new Set(["3", "9"])))}` : "";
+      }
+
+      if (kind === "potBlackjack") {
+        return hole.length ? `BJ ${blackjackBest(hole)}` : "";
+      }
+
+      return safeHighBadge(allVisible) ? `H:${safeHighBadge(allVisible)}` : "";
+    }
+
+    function updatePointBadges(dealtHands, rules) {
+      if (handState) {
+        refreshPointBadges();
+        return;
+      }
+      seats.forEach((seat) => {
+        seat.dataset.points = "";
+      });
     }
 
     function refreshPointBadges() {
@@ -4323,12 +4487,7 @@
       }
 
       seats.forEach((seat, index) => {
-        if (handState.folded[index] || ["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen"].includes(handState.rules.kind)) {
-          seat.dataset.points = "";
-          return;
-        }
-
-        seat.dataset.points = formatPointTotal(visibleCardsForSeat(index), handState.rules);
+        seat.dataset.points = badgeLabelForSeat(index);
       });
     }
 
@@ -4484,21 +4643,19 @@
     function startInitialBettingRound(reason = "Opening betting begins") {
       const openingBettor = findOpeningBettor(handState.hands, handState.rules, handState.upCards);
       const openingBet = openingBetForShowingTotal(handState.rules, openingBettor.value);
-      const nextIndex = nextOccupiedIndex(openingBettor.index);
       handState.phase = "betting";
-      handState.currentBet = openingBet;
+      handState.currentBet = 0;
       handState.betUnit = openingBet;
       handState.raiseCount = 0;
-      handState.contributions = seats.map((_, index) => index === openingBettor.index ? openingBet : 0);
-      handState.pending = new Set(occupiedIndexes().filter((index) => index !== openingBettor.index));
-      handState.lastAction = `${seatName(openingBettor.index)} opened for ${openingBet}`;
-      postForcedBet(openingBettor.index, openingBet);
+      handState.contributions = seats.map(() => 0);
+      handState.pending = new Set(occupiedIndexes());
+      handState.lastAction = `${seatName(openingBettor.index)} shows ${openingBettor.value} and acts first`;
       setCurrentGameDisplay(handState.rules.name, handState.dealerOptions || currentDealerOptionsText(handState.rules));
-      setTableMessage(`${seatName(openingBettor.index)} posts the forced bet.`, `${reason}. Showing ${openingBettor.value}, posts ${openingBet}. Action is on ${seatName(nextIndex)}.`);
-      addActionLog(`${seatName(openingBettor.index)} shows ${openingBettor.value} and posts ${openingBet}.`, true);
+      setTableMessage(`${seatName(openingBettor.index)} acts first.`, `${reason}. Showing ${openingBettor.value}, may bet ${openingBet} or fold.`);
+      addActionLog(`${seatName(openingBettor.index)} shows ${openingBettor.value} and acts first for ${openingBet}.`, true);
       renderAllHands();
       refreshPointBadges();
-      setActiveSeat(nextIndex, "Action");
+      setActiveSeat(openingBettor.index, "Action");
       scheduleNextAction();
     }
 
@@ -4744,22 +4901,19 @@
     function startRotatingBettingRound(reason, amount, title) {
       const previousStarter = handState.lastBetStarter ?? dealerIndex;
       const starter = nextActiveIndex(previousStarter);
-      const postedAmount = Math.min(amount, availableStack(starter));
       handState.phase = "betting";
       handState.raiseCount = 0;
-      handState.contributions = seats.map((_, index) => index === starter ? postedAmount : 0);
-      handState.currentBet = postedAmount;
+      handState.contributions = seats.map(() => 0);
+      handState.currentBet = 0;
       handState.betUnit = amount;
-      handState.pending = new Set(activePlayerIndexes().filter((index) => index !== starter));
+      handState.pending = new Set(activePlayerIndexes());
       handState.lastBetStarter = starter;
-      pot += debitStack(starter, postedAmount);
       updateStacks();
       updatePot();
-      const nextIndex = nextActiveIndex(starter);
-      handState.lastAction = `${seatName(starter)} opened for ${postedAmount}`;
-      addActionLog(`${seatName(starter)} starts this round for ${postedAmount}.`, true);
-      setTableMessage(title, `${reason}. ${seatName(starter)} posts ${postedAmount}. Action is on ${seatName(nextIndex)}.`);
-      setActiveSeat(nextIndex, "Action");
+      handState.lastAction = `${seatName(starter)} starts this round`;
+      addActionLog(`${seatName(starter)} starts this round and may bet ${amount} or fold.`, true);
+      setTableMessage(title, `${reason}. ${seatName(starter)} may bet ${amount} or fold.`);
+      setActiveSeat(starter, "Action");
       scheduleNextAction();
     }
 
@@ -5189,11 +5343,33 @@
       renderSeatHand(userSeatIndex);
     }
 
-    function revealLittlePigCard(index, cardIndex) {
-      handState.upCards[index].add(cardIndex);
+    function lockLittlePigRevealCard(index, cardIndex) {
+      if (!handState || handState.phase !== "pigReveal" || !handState.pending.has(index)) {
+        return;
+      }
+      handState.revealChoices[index] = cardIndex;
       handState.pending.delete(index);
-      handState.lastAction = `${seatName(index)} revealed a card`;
+      handState.lastAction = `${seatName(index)} locked a reveal card`;
       addActionLog(handState.lastAction);
+      seats[index].querySelector(".seat-status").textContent = "Locked";
+    }
+
+    function revealLittlePigLockedCards() {
+      activePlayerIndexes().forEach((index) => {
+        const cardIndex = handState.revealChoices?.[index];
+        if (Number.isInteger(cardIndex)) {
+          handState.upCards[index].add(cardIndex);
+          seats[index].querySelector(".seat-status").textContent = "Revealed";
+        }
+      });
+      handState.lastAction = "Little Pig reveal cards are up";
+      addActionLog(handState.lastAction, true);
+      renderAllHands();
+      refreshPointBadges();
+    }
+
+    function revealLittlePigCard(index, cardIndex) {
+      lockLittlePigRevealCard(index, cardIndex);
       renderSeatHand(index);
     }
 
@@ -5201,6 +5377,7 @@
       handState.phase = "pigReveal";
       handState.revealCount = revealCount;
       handState.pending = new Set(activePlayerIndexes());
+      handState.revealChoices = seats.map(() => null);
       selectedRollCardIndex = null;
       rollButton.textContent = "Reveal";
       rollButton.disabled = true;
@@ -5212,7 +5389,7 @@
           const hiddenIndexes = handState.hands[index]
             .map((_, cardIndex) => cardIndex)
             .filter((cardIndex) => !handState.upCards[index].has(cardIndex));
-          revealLittlePigCard(index, hiddenIndexes[0]);
+          lockLittlePigRevealCard(index, hiddenIndexes[0]);
         }
       });
 
@@ -5237,6 +5414,7 @@
       selectedRollCardIndex = null;
       rollButton.textContent = "Roll";
       rollButton.disabled = true;
+      revealLittlePigLockedCards();
       startLittlePigBettingRound(`${handState.revealCount} player card${handState.revealCount > 1 ? "s are" : " is"} up`);
     }
 
@@ -5337,6 +5515,8 @@
     function updateBettingButtons() {
       const toCall = Math.max(0, handState.currentBet - handState.contributions[activeIndex]);
       const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
+      const canCheck = studBetting;
+      const needsOpeningBet = handState.currentBet === 0 && !canCheck;
       const raiseUnit = studBetting ? 1 : handState.betUnit;
       const canBetTwo = studBetting && hasShowingPair(activeIndex) && handState.raiseCount < handState.rules.maxRaises;
       const raiseTo = handState.currentBet + raiseUnit;
@@ -5344,11 +5524,12 @@
       const betTwoTo = handState.currentBet + 2;
       const betTwoCost = Math.max(0, betTwoTo - handState.contributions[activeIndex]);
       callButton.textContent = toCall > 0 ? `Call ${toCall}` : "Call 0";
-      callButton.disabled = toCall > availableStack(activeIndex);
+      callButton.style.display = needsOpeningBet ? "none" : "";
+      callButton.disabled = needsOpeningBet || toCall > availableStack(activeIndex);
       raiseButton.textContent = handState.raiseCount >= handState.rules.maxRaises
         ? "Raise Maxed"
         : `${handState.currentBet === 0 ? "Bet" : "Raise to"} ${raiseTo}`;
-      raiseButton.disabled = handState.raiseCount >= handState.rules.maxRaises || raiseCost > availableStack(activeIndex);
+      raiseButton.disabled = (handState.currentBet > 0 && handState.raiseCount >= handState.rules.maxRaises) || raiseCost > availableStack(activeIndex);
       studBetTwoButton.textContent = handState.currentBet === 0 ? "Bet 2" : `Raise to ${betTwoTo}`;
       studBetTwoButton.style.display = canBetTwo ? "" : "none";
       studBetTwoButton.disabled = !canBetTwo || betTwoCost > availableStack(activeIndex);
@@ -5362,13 +5543,17 @@
       if (!handState || (!isUserSeat(activeIndex) && !hasPendingUserChoice())) {
         return;
       }
+      if (["pigReveal", "pigDeclare"].includes(handState.phase) && !handState.pending.has(userSeatIndex)) {
+        return;
+      }
 
       if (handState.phase === "betting") {
         updateBettingButtons();
         bettingActions.classList.add("visible");
-        const checkText = ["mariah", "followQueen", "night"].includes(handState.rules.kind)
+        const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
+        const checkText = studBetting
           ? "You may check/call 0, bet, or fold."
-          : "You may call 0 or raise. There are no checks in this game.";
+          : `Bet ${handState.betUnit} or fold. There are no checks in this game.`;
         setTableMessage("Your betting action.", `${handState.currentBet > handState.contributions[activeIndex] ? "Call, raise, or fold." : checkText}`);
       }
 
@@ -5489,6 +5674,10 @@
 
     function payToCall(index) {
       const toCall = Math.max(0, handState.currentBet - handState.contributions[index]);
+      const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
+      if (toCall === 0 && handState.currentBet === 0 && !studBetting) {
+        return false;
+      }
       if (toCall > availableStack(index)) {
         return false;
       }
@@ -5504,7 +5693,8 @@
     }
 
     function raisePlayer(index, requestedUnit = null) {
-      if (handState.raiseCount >= handState.rules.maxRaises) {
+      const openingBet = handState.currentBet === 0;
+      if (!openingBet && handState.raiseCount >= handState.rules.maxRaises) {
         return false;
       }
 
@@ -5519,12 +5709,16 @@
         return false;
       }
       handState.currentBet = nextBet;
-      handState.raiseCount += 1;
+      if (!openingBet) {
+        handState.raiseCount += 1;
+      }
       const paid = debitStack(index, toPay);
       pot += paid;
       handState.contributions[index] += paid;
       handState.pending = new Set(activePlayerIndexes().filter((playerIndex) => playerIndex !== index));
-      handState.lastAction = `${seatName(index)} raised to ${handState.currentBet}`;
+      handState.lastAction = openingBet
+        ? `${seatName(index)} opened for ${handState.currentBet}`
+        : `${seatName(index)} raised to ${handState.currentBet}`;
       addActionLog(handState.lastAction);
       updateStacks();
       updatePot();
@@ -8354,13 +8548,12 @@
       const forcedBettor = findForcedBettor();
       const forcedBet = openingBetForShowingTotal(handState.rules, forcedBettor.value);
       handState.betUnit = forcedBet;
-      postForcedBet(forcedBettor.index, forcedBet);
-      handState.pending = new Set(activePlayerIndexes().filter((index) => index !== forcedBettor.index));
-      handState.lastAction = `${seatName(forcedBettor.index)} shows ${forcedBettor.value} and posts ${forcedBet}`;
+      handState.currentBet = 0;
+      handState.pending = new Set(activePlayerIndexes());
+      handState.lastAction = `${seatName(forcedBettor.index)} shows ${forcedBettor.value} and acts first`;
       addActionLog(handState.lastAction, true);
-      const firstBettor = nextActiveIndex(forcedBettor.index);
-      setTableMessage(`${isFinalBetting ? "Final betting round." : "New betting round."}`, `${reason}. Action is on ${seatName(firstBettor)}.`);
-      setActiveSeat(firstBettor, "Action");
+      setTableMessage(`${isFinalBetting ? "Final betting round." : "New betting round."}`, `${reason}. ${seatName(forcedBettor.index)} may bet ${forcedBet} or fold.`);
+      setActiveSeat(forcedBettor.index, "Action");
       scheduleNextAction();
     }
 
@@ -8628,6 +8821,7 @@
         advanceAfterAction();
         return;
       }
+      const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
       if (["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen", "grinner", "bingo", "shotgun", "cincinnati", "circle", "mariah", "followQueen", "night"].includes(handState.rules.kind)) {
         const strength = botHandStrength(index);
         const shouldFold = botShouldFold(index, toCall, strength);
@@ -8639,8 +8833,15 @@
           return;
         }
 
+        if (!studBetting && handState.currentBet === 0) {
+          if (!raisePlayer(index)) {
+            foldPlayer(index);
+          }
+          advanceAfterAction();
+          return;
+        }
+
         if (shouldRaise) {
-          const studBetting = ["mariah", "followQueen", "night"].includes(handState.rules.kind);
           const unit = studBetting && hasShowingPair(index) && strength > 0.58 ? 2 : 1;
           if (!raisePlayer(index, studBetting ? unit : null)) {
             payToCall(index);
@@ -8667,6 +8868,14 @@
       if (shouldRaise) {
         if (!raisePlayer(index)) {
           payToCall(index);
+        }
+        advanceAfterAction();
+        return;
+      }
+
+      if (handState.currentBet === 0) {
+        if (!raisePlayer(index)) {
+          foldPlayer(index);
         }
         advanceAfterAction();
         return;
@@ -8928,6 +9137,7 @@
           phase: "dealt",
           currentBet: 0,
           betUnit: rules.openingBet || Number(pigPreBet.value) || 1,
+          betBumpLocked: false,
           raiseCount: 0,
           contributions: seats.map(() => 0),
           pending: new Set(),
