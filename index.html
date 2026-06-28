@@ -2728,7 +2728,7 @@
 
       const acceptsPendingChoice = Boolean(
         handState
-        && ["pigReveal", "pigDeclare"].includes(handState.phase)
+        && ["rolling", "pigReveal", "pigDeclare"].includes(handState.phase)
         && handState.pending?.has?.(seatIndex)
       );
       if (!handState || !seat || seat.type === "bot" || (activeIndex !== seatIndex && !acceptsPendingChoice)) {
@@ -2778,6 +2778,11 @@
       } else if (handState.phase === "pigDeclare") {
         if (type === "declareLow" || type === "declareHigh" || type === "declareBoth") {
           declareLittlePig(seatIndex, type.replace("declare", "").toLowerCase());
+        }
+      } else if (handState.phase === "rolling") {
+        if (type === "rollCard" && Number.isInteger(payload.cardIndex)) {
+          rollCardForPlayer(seatIndex, payload.cardIndex);
+          await finishRollPhaseIfReady();
         }
       } else if (handState.phase === "pigReveal") {
         if (type === "revealCard" && Number.isInteger(payload.cardIndex)) {
@@ -3092,7 +3097,7 @@
       return Boolean(
         handState
         && handState.pending?.has?.(userSeatIndex)
-        && ["pigReveal", "pigDeclare"].includes(handState.phase)
+        && ["rolling", "pigReveal", "pigDeclare"].includes(handState.phase)
       );
     }
 
@@ -4162,6 +4167,7 @@
       return Boolean(
         isUserSeat(seatIndex)
         && sampleCard
+        && handState?.phase !== "rolling"
         && !isPublicCard(seatIndex, cardIndex)
         && shouldDiscardZeroUpCard(sampleCard, handState.rules)
       );
@@ -4527,7 +4533,7 @@
           card.classList.add("up-card");
         }
 
-        if (publicCard && isStudWildCard(sampleCard)) {
+        if (showCard && isStudWildCard(sampleCard)) {
           card.classList.add("sideways-card");
         }
 
@@ -5543,7 +5549,7 @@
       if (!handState || (!isUserSeat(activeIndex) && !hasPendingUserChoice())) {
         return;
       }
-      if (["pigReveal", "pigDeclare"].includes(handState.phase) && !handState.pending.has(userSeatIndex)) {
+      if (["rolling", "pigReveal", "pigDeclare"].includes(handState.phase) && !handState.pending.has(userSeatIndex)) {
         return;
       }
 
@@ -5834,6 +5840,21 @@
           remainder -= 1;
         }
       });
+    }
+
+    function splitPotAmounts(firstSideWinners, secondSideWinners, totalAmount = pot) {
+      const firstHasWinner = firstSideWinners.some((index) => !handState?.folded?.[index]);
+      const secondHasWinner = secondSideWinners.some((index) => !handState?.folded?.[index]);
+      if (firstHasWinner && secondHasWinner) {
+        return [Math.floor(totalAmount / 2), Math.ceil(totalAmount / 2)];
+      }
+      if (firstHasWinner) {
+        return [totalAmount, 0];
+      }
+      if (secondHasWinner) {
+        return [0, totalAmount];
+      }
+      return [0, 0];
     }
 
     function cardHistoryText(card) {
@@ -6283,8 +6304,7 @@
       const lowWinners = treeWinners("low");
       const highWinners = treeWinners("high");
       const hasLow = lowWinners.length > 0;
-      const lowPot = hasLow ? Math.floor(pot / 2) : 0;
-      const highPot = hasLow ? Math.ceil(pot / 2) : pot;
+      const [lowPot, highPot] = splitPotAmounts(lowWinners, highWinners);
 
       awardShare(lowWinners, lowPot);
       awardShare(highWinners, highPot);
@@ -6430,8 +6450,9 @@
       const highWinners = omahaWinners("high");
       const lowWinners = handState.rules.highLow ? omahaWinners("low") : [];
       const hasLow = handState.rules.highLow && lowWinners.length > 0;
-      const lowPot = hasLow ? Math.floor(pot / 2) : 0;
-      const highPot = hasLow ? Math.ceil(pot / 2) : pot;
+      const [lowPot, highPot] = handState.rules.highLow
+        ? splitPotAmounts(lowWinners, highWinners)
+        : [0, pot];
 
       awardShare(lowWinners, lowPot);
       awardShare(highWinners, highPot);
@@ -6580,8 +6601,7 @@
       const lowWinners = sliderPigWinners("low");
       const highWinners = sliderPigWinners("high");
       const hasLow = lowWinners.length > 0;
-      const lowPot = hasLow ? Math.floor(pot / 2) : 0;
-      const highPot = hasLow ? Math.ceil(pot / 2) : pot;
+      const [lowPot, highPot] = splitPotAmounts(lowWinners, highWinners);
       awardShare(lowWinners, lowPot);
       awardShare(highWinners, highPot);
 
@@ -6763,8 +6783,7 @@
       const suitWinners = fiveTenSuitWinners();
       const highWinners = fiveTenHighWinners();
       const hasSuit = suitWinners.length > 0;
-      const suitPot = hasSuit ? Math.floor(pot / 2) : 0;
-      const highPot = hasSuit ? Math.ceil(pot / 2) : pot;
+      const [suitPot, highPot] = splitPotAmounts(suitWinners, highWinners);
       awardShare(suitWinners, suitPot);
       awardShare(highWinners, highPot);
 
@@ -6887,8 +6906,7 @@
       } else {
         lowWinners = grinnerWinners("splitter");
         highWinners = grinnerWinners("high");
-        lowPot = lowWinners.length ? Math.floor(pot / 2) : 0;
-        highPot = lowWinners.length ? Math.ceil(pot / 2) : pot;
+        [lowPot, highPot] = splitPotAmounts(lowWinners, highWinners);
       }
 
       awardShare(lowWinners, lowPot);
@@ -6967,8 +6985,7 @@
       } else {
         lowWinners = bingoWinners("low");
         highWinners = bingoWinners("high");
-        lowPot = Math.floor(pot / 2);
-        highPot = Math.ceil(pot / 2);
+        [lowPot, highPot] = splitPotAmounts(lowWinners, highWinners);
       }
 
       if (sweepWinners.length > 0) {
@@ -7319,8 +7336,7 @@
       handState.communityRevealed = 4;
       renderCommunityCards();
       const splitterWinners = cincinnatiSplitterWinners();
-      const splitPot = splitterWinners.length ? Math.floor(pot / 2) : 0;
-      const highPot = splitterWinners.length ? Math.ceil(pot / 2) : pot;
+      const [splitPot, highPot] = splitPotAmounts(splitterWinners, highWinners);
       awardShare(splitterWinners, splitPot);
       awardShare(highWinners, highPot);
 
@@ -7481,8 +7497,7 @@
       renderCommunityCards();
       const highWinners = circleHighWinners();
       const splitterWinners = handState.circleSplitterCard ? circleSplitterWinners() : [];
-      const splitPot = splitterWinners.length ? Math.floor(pot / 2) : 0;
-      const highPot = splitterWinners.length ? Math.ceil(pot / 2) : pot;
+      const [splitPot, highPot] = splitPotAmounts(splitterWinners, highWinners);
       awardShare(splitterWinners, splitPot);
       awardShare(highWinners, highPot);
 
@@ -7616,29 +7631,40 @@
 
     function updateFollowWildFromUpCard(card) {
       if (handState.rules.kind !== "followQueen") return;
-      if (handState.waitingForFollowCard) {
-        if (card.rank === "Q") {
-          handState.followWildRank = null;
-          handState.waitingForFollowCard = true;
-        } else {
-          handState.followWildRank = card.rank;
-          handState.waitingForFollowCard = false;
-          addActionLog(`${card.rank}s now follow as wild.`, true);
-          renderAllHands();
-        }
-      } else if (card.rank === "Q") {
+
+      if (card.rank === "Q") {
+        const hadFollowWild = Boolean(handState.followWildRank);
         handState.followWildRank = null;
         handState.waitingForFollowCard = true;
-        addActionLog("Queen up. The next up card will follow as wild.", true);
+        addActionLog(
+          hadFollowWild
+            ? "Queen up. The old follow wild is off; the next up card will follow as wild."
+            : "Queen up. The next up card will follow as wild.",
+          true
+        );
+        renderAllHands();
+        return;
+      }
+
+      if (handState.waitingForFollowCard) {
+        handState.followWildRank = card.rank;
+        handState.waitingForFollowCard = false;
+        addActionLog(`${card.rank}s now follow as wild.`, true);
         renderAllHands();
       }
     }
 
     function clearUnresolvedFollow() {
       if (handState?.rules?.kind === "followQueen" && handState.waitingForFollowCard) {
+        const hadFollowWild = Boolean(handState.followWildRank);
         handState.followWildRank = null;
         handState.waitingForFollowCard = false;
-        addActionLog("No following up card arrived. Only fixed wilds remain.", true);
+        addActionLog(
+          hadFollowWild
+            ? "No following up card arrived. The follow wild is off."
+            : "No following up card arrived. Only fixed wilds remain.",
+          true
+        );
         renderAllHands();
       }
     }
@@ -7848,8 +7874,7 @@
       const lowWinners = handState.rules.kind === "followQueen" ? followSplitterWinners() : mariahLowWinners();
       const highWinners = mariahHighWinners();
       const hasSplit = handState.rules.kind === "mariah" || handState.followSplitterOn;
-      const lowPot = hasSplit && lowWinners.length ? Math.floor(pot / 2) : 0;
-      const highPot = hasSplit && lowWinners.length ? Math.ceil(pot / 2) : pot;
+      const [lowPot, highPot] = hasSplit ? splitPotAmounts(lowWinners, highWinners) : [0, pot];
       awardShare(lowWinners, lowPot);
       awardShare(highWinners, highPot);
       lowWinners.forEach((index) => {
@@ -7915,8 +7940,7 @@
         }
       });
 
-      const lowPot = Math.floor(pot / 2);
-      const highPot = Math.ceil(pot / 2);
+      const [lowPot, highPot] = splitPotAmounts(lowWinners, highWinners);
       awardShare(lowWinners, lowPot);
       awardShare(highWinners, highPot);
 
@@ -8407,8 +8431,8 @@
       const lowWinners = winnersForTarget(lowTarget);
       const highWinners = winnersForTarget(highTarget);
       const hasLowPot = handState.rules.targetMode !== "under" || lowWinners.length > 0;
-      const lowPot = hasLowPot ? Math.floor(pot / 2) : 0;
-      const highPot = hasLowPot ? Math.ceil(pot / 2) : pot;
+      const [rawLowPot, highPot] = hasLowPot ? splitPotAmounts(lowWinners, highWinners) : [0, pot];
+      const lowPot = hasLowPot ? rawLowPot : 0;
       const historyHands = handHistoryMarkup(lowWinners, highWinners);
 
       awardShare(lowWinners, lowPot);
@@ -9444,6 +9468,12 @@
         || !handState.pending.has(userSeatIndex)
         || selectedRollCardIndex === null
       ) {
+        return;
+      }
+
+      if (await sendOnlineAction("rollCard", { cardIndex: selectedRollCardIndex })) {
+        selectedRollCardIndex = null;
+        rollButton.disabled = true;
         return;
       }
 
