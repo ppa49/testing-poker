@@ -3630,6 +3630,7 @@
       addActionLog("Waiting for ready up.", true);
       if (handState) {
         handState.nextDealerIndex = nextDealer;
+        refreshPointBadges();
       }
     }
 
@@ -4436,7 +4437,12 @@
       }
 
       if (kind === "littlePig") {
-        return splitBadge(safeLowBadge(allVisible), safeHighBadge(allVisible));
+        if (!canSeeFullSeatHand(index)) return "";
+        const declared = handState.declarations?.[index];
+        const scoreCards = littlePigHandCards(index);
+        const low = declared === "low" || declared === "both" ? lowBadgeName(evaluateLow(scoreCards)) : "";
+        const high = declared === "high" || declared === "both" ? highBadgeName(evaluateHigh(scoreCards)) : "";
+        return splitBadge(low, high);
       }
 
       if (kind === "christmasTree") {
