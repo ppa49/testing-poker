@@ -419,6 +419,13 @@
       line-height: 1.25;
     }
 
+    .table-text-dock {
+      display: grid;
+      justify-items: center;
+      gap: 6px;
+      max-width: min(460px, calc(100vw - 24px));
+    }
+
     .test-deal-button {
       margin-top: 8px;
       width: 100%;
@@ -1088,6 +1095,18 @@
         0 8px 14px rgba(0, 0, 0, 0.3);
     }
 
+    .player-card.disabled-card {
+      cursor: not-allowed;
+      filter: grayscale(0.65) brightness(0.82);
+      opacity: 0.62;
+    }
+
+    .player-card.disabled-card:hover {
+      transform: none;
+      border-color: rgba(120, 130, 145, 0.55);
+      box-shadow: none;
+    }
+
     .player-card.mucked-card {
       transform: rotate(-4deg);
       border-color: rgba(255, 255, 255, 0.18);
@@ -1544,11 +1563,34 @@
       width: min(300px, calc(100vw - 32px));
       z-index: 120;
       grid-template-columns: repeat(2, minmax(112px, 1fr));
-      padding: 8px;
+      padding: 26px 8px 8px;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
       background: rgba(13, 15, 18, 0.92);
       box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.46);
+    }
+
+    .player-actions.visible::before {
+      content: "Drag actions";
+      position: absolute;
+      inset: 4px 8px auto;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 5px;
+      color: rgba(255, 255, 255, 0.62);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      cursor: move;
+      user-select: none;
+    }
+
+    .player-actions.visible.dragging {
+      cursor: move;
+      opacity: 0.96;
     }
 
     .player-actions.single-action.visible {
@@ -1559,6 +1601,45 @@
     .player-actions button {
       min-height: 46px;
       font-size: 14px;
+    }
+
+    @media (min-width: 721px) {
+      .table-text-dock {
+        position: fixed;
+        left: var(--rules-dock-left, 50%);
+        top: var(--rules-dock-top, 120px);
+        width: min(420px, calc(100vw - 32px));
+        z-index: 115;
+        padding: 24px 10px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: rgba(10, 22, 18, 0.72);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+        backdrop-filter: blur(3px);
+      }
+
+      .table-text-dock::before {
+        content: "Drag rules";
+        position: absolute;
+        inset: 4px 8px auto;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        cursor: move;
+        user-select: none;
+      }
+
+      .table-text-dock.dragging {
+        cursor: move;
+        opacity: 0.96;
+      }
     }
 
     @media (max-width: 720px) {
@@ -1611,6 +1692,10 @@
         backdrop-filter: blur(6px);
       }
 
+      .player-actions.visible::before {
+        content: none;
+      }
+
       .player-actions.single-action.visible {
         grid-template-columns: minmax(160px, 1fr);
       }
@@ -1647,10 +1732,12 @@
         <div class="table">
           <div class="table-center">
             <div class="pot">Pot: 0</div>
-            <div class="current-game" id="current-game">Dealer chooses the next game</div>
-            <div class="dealer-options-line" id="dealer-options-line"></div>
-            <div class="round-info" id="round-info">
-              <span>Pick a game to load rules</span>
+            <div class="table-text-dock" id="table-text-dock">
+              <div class="current-game" id="current-game">Dealer chooses the next game</div>
+              <div class="dealer-options-line" id="dealer-options-line"></div>
+              <div class="round-info" id="round-info">
+                <span>Pick a game to load rules</span>
+              </div>
             </div>
             <div class="community-cards" id="community-cards"></div>
             <div class="player-actions" id="betting-actions">
@@ -1680,6 +1767,7 @@
             </div>
             <div class="player-actions" id="inbetween-actions">
               <button id="inbetween-pass" type="button">Pass</button>
+              <button id="inbetween-split" type="button">Split 4</button>
               <input id="inbetween-wager" type="number" min="1" step="1" value="1">
               <button id="inbetween-bet" type="button">Bet</button>
             </div>
@@ -1745,6 +1833,7 @@
               <option>Follow the Bitch</option>
               <option>Night Baseball</option>
               <option>Pot BlackJack</option>
+              <option>Hearts Up</option>
             </select>
             <button type="submit">Pick</button>
           </div>
@@ -1827,6 +1916,12 @@
                 <option value="pot">Pay the pot</option>
                 <option value="player">Pay the player</option>
               </select>
+            </div>
+          </div>
+          <div class="tree-bet-settings" id="hearts-settings">
+            <div class="tree-card-count">
+              <label for="hearts-ante">Ante</label>
+              <input id="hearts-ante" type="number" min="1" step="1" value="1">
             </div>
           </div>
           <div class="tree-bet-settings" id="grinner-settings">
@@ -2175,6 +2270,7 @@
     const repeatFlash = document.querySelector("#repeat-flash");
     const dealerButton = document.querySelector("#dealer-button");
     const dealerPanel = document.querySelector("#dealer-panel");
+    const tableTextDock = document.querySelector("#table-text-dock");
     const currentGame = document.querySelector("#current-game");
     const dealerOptionsLine = document.querySelector("#dealer-options-line");
     const potDisplay = document.querySelector(".pot");
@@ -2210,6 +2306,8 @@
     const b52Settings = document.querySelector("#b52-settings");
     const b52Ante = document.querySelector("#b52-ante");
     const b52PayMode = document.querySelector("#b52-pay-mode");
+    const heartsSettings = document.querySelector("#hearts-settings");
+    const heartsAnte = document.querySelector("#hearts-ante");
     const grinnerSettings = document.querySelector("#grinner-settings");
     const grinnerCardCount = document.querySelector("#grinner-card-count");
     const grinnerDirection = document.querySelector("#grinner-direction");
@@ -2315,6 +2413,7 @@
     const declareOut = document.querySelector("#declare-out");
     const inbetweenActions = document.querySelector("#inbetween-actions");
     const inbetweenPass = document.querySelector("#inbetween-pass");
+    const inbetweenSplit = document.querySelector("#inbetween-split");
     const inbetweenWager = document.querySelector("#inbetween-wager");
     const inbetweenBet = document.querySelector("#inbetween-bet");
     const aceChoiceActions = document.querySelector("#ace-choice-actions");
@@ -2771,10 +2870,24 @@
           "Dealer funds the pot. Players wager against the pot one at a time.",
           "Dealer hits soft 17. Ties go to the dealer. After 3 rounds, dealer keeps the rest."
         ]
+      },
+      "Hearts Up": {
+        name: "Hearts Up",
+        kind: "heartsUp",
+        dealerAnte: 1,
+        playerAnte: 1,
+        maxRaises: 0,
+        cardsPerPlayer: 3,
+        preview: [
+          "Hearts are trump. Players draw, then play three tricks like euchre-style laydowns.",
+          "The pot is split into 3 stacks. Each trick winner takes one stack; trickless players match the full pot."
+        ]
       }
     };
     const gameNames = Object.keys(gameRules);
     const favoriteGamesKey = "riverforge.favoriteGames";
+    const actionDockPositionKey = "riverforge.actionDockPosition";
+    const rulesDockPositionKey = "riverforge.rulesDockPosition";
     let favoriteGames = new Set(loadFavoriteGames());
     let pot = 0;
     let dealerIndex = 4;
@@ -2786,6 +2899,8 @@
     let actionTimer = null;
     let stepMode = false;
     let waitingForStep = false;
+    let actionDockDrag = null;
+    let rulesDockDrag = null;
     const BOT_ACTION_DELAY = 700;
     const DEAL_CARD_DELAY = 130;
     const DEAL_FINISH_DELAY = 750;
@@ -3140,6 +3255,18 @@
           stayPlayer(seatIndex);
           advanceAfterAction();
         }
+      } else if (handState.phase === "inbetweenAce") {
+        if (type === "aceLow" || type === "aceHigh") {
+          await chooseInBetweenAce(seatIndex, type === "aceLow" ? "low" : "high");
+        }
+      } else if (handState.phase === "inbetweenAction") {
+        if (type === "inbetweenPass") {
+          await inBetweenPass(seatIndex);
+        } else if (type === "inbetweenBet") {
+          await inBetweenResolve(seatIndex, Number(payload.amount) || 1);
+        } else if (type === "inbetweenSplit") {
+          await splitInBetweenPair(seatIndex);
+        }
       } else if (handState.phase === "b52Declare") {
         if (type === "declareIn" || type === "declareOut") {
           b52Declare(seatIndex, type === "declareIn");
@@ -3149,6 +3276,11 @@
         if (type === "declareIn" || type === "declareOut") {
           fiveTenDeclare(seatIndex, type === "declareIn");
           advanceAfterAction();
+        }
+      } else if (handState.phase === "heartsDeclare") {
+        if (type === "declareIn" || type === "declareOut") {
+          heartsDeclare(seatIndex, type === "declareIn");
+          finishHeartsDeclareIfReady();
         }
       } else if (handState.phase === "pigDeclare") {
         if (type === "declareLow" || type === "declareHigh" || type === "declareBoth") {
@@ -3168,6 +3300,14 @@
         if (type === "drawCards") {
           b52DrawPlayer(seatIndex, new Set(payload.cardIndexes || []));
           advanceAfterAction();
+        }
+      } else if (handState.phase === "heartsDraw") {
+        if (type === "drawCards") {
+          heartsDrawPlayer(seatIndex, new Set(payload.cardIndexes || []));
+        }
+      } else if (handState.phase === "heartsPlay") {
+        if (type === "playCard" && Number.isInteger(payload.cardIndex)) {
+          playHeartsCard(seatIndex, payload.cardIndex);
         }
       } else if (handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw") {
         if (type === "drawCards") {
@@ -3724,6 +3864,9 @@
       if (rules.kind === "b52") {
         return `Ante ${b52Ante.value}; ${b52PayMode.value === "pot" ? "pay the pot" : "pay the player"}`;
       }
+      if (rules.kind === "heartsUp") {
+        return `Ante ${heartsAnte.value}; hearts trump; 3 trick pots`;
+      }
       if (rules.kind === "grinner") {
         return `${grinnerCardCount.value} cards; splitter ${grinnerDirection.value}${grinnerFlimflam.checked ? "; Flim Flam" : ""}; bets ${betList(grinnerBetInputs)}${grinnerFaceBet.checked ? "; final bet face" : ""}`;
       }
@@ -3776,6 +3919,7 @@
     function setCurrentGameDisplay(name, options = "") {
       currentGame.textContent = name ? `Current game: ${name}` : "Dealer chooses the next game";
       dealerOptionsLine.textContent = options || "";
+      requestAnimationFrame(positionRulesDock);
     }
 
     function setTableMessage(primary, secondary = "") {
@@ -3785,6 +3929,7 @@
         ${secondary ? `<span>${secondary}</span>` : ""}
         ${contextLines.map((line) => `<span class="table-context">${line}</span>`).join("")}
       `;
+      requestAnimationFrame(positionRulesDock);
       scheduleHostGameSync();
     }
 
@@ -3978,6 +4123,48 @@
       document.body.appendChild(panel);
     }
 
+    function getSavedActionDockPosition() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(actionDockPositionKey) || "null");
+        if (Number.isFinite(saved?.left) && Number.isFinite(saved?.top)) {
+          return saved;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }
+
+    function saveActionDockPosition(left, top) {
+      localStorage.setItem(actionDockPositionKey, JSON.stringify({
+        left: Math.round(left),
+        top: Math.round(top)
+      }));
+    }
+
+    function actionDockViewport() {
+      return {
+        width: document.documentElement.clientWidth || window.innerWidth,
+        height: document.documentElement.clientHeight || window.innerHeight
+      };
+    }
+
+    function clampActionDockPosition(panel, left, top) {
+      const viewport = actionDockViewport();
+      const margin = 12;
+      const panelWidth = panel.offsetWidth || (panel.classList.contains("single-action") ? 190 : 300);
+      const panelHeight = Math.max(panel.offsetHeight || 90, 54);
+      return {
+        left: Math.min(Math.max(margin, left), Math.max(margin, viewport.width - panelWidth - margin)),
+        top: Math.min(Math.max(margin, top), Math.max(margin, viewport.height - panelHeight - margin))
+      };
+    }
+
+    function applyActionDockPosition(left, top) {
+      document.documentElement.style.setProperty("--action-dock-left", `${Math.round(left)}px`);
+      document.documentElement.style.setProperty("--action-dock-top", `${Math.round(top)}px`);
+    }
+
     function positionActionDock() {
       const panel = visibleActionPanel();
       if (!panel) {
@@ -3988,25 +4175,185 @@
         return;
       }
 
+      const savedPosition = getSavedActionDockPosition();
+      if (savedPosition) {
+        const savedDock = clampActionDockPosition(panel, savedPosition.left, savedPosition.top);
+        applyActionDockPosition(savedDock.left, savedDock.top);
+        saveActionDockPosition(savedDock.left, savedDock.top);
+        return;
+      }
+
       const seatRect = seats[userSeatIndex].getBoundingClientRect();
-      const panelWidth = panel.classList.contains("single-action") ? 190 : 300;
+      const panelWidth = panel.offsetWidth || (panel.classList.contains("single-action") ? 190 : 300);
       const panelHeight = Math.max(panel.offsetHeight || 90, 54);
-      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-      const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+      const viewport = actionDockViewport();
       const margin = 12;
       let left = seatRect.right + margin;
-      if (left + panelWidth > viewportWidth - margin) {
+      if (left + panelWidth > viewport.width - margin) {
         left = Math.max(margin, seatRect.left - panelWidth - margin);
       }
-      left = Math.min(Math.max(margin, left), Math.max(margin, viewportWidth - panelWidth - margin));
       let top = seatRect.top + Math.round(seatRect.height * 0.56);
-      if (top + panelHeight > viewportHeight - margin) {
+      if (top + panelHeight > viewport.height - margin) {
         top = Math.max(margin, seatRect.bottom - panelHeight);
       }
-      top = Math.min(Math.max(margin, top), Math.max(margin, viewportHeight - panelHeight - margin));
+      const dockPosition = clampActionDockPosition(panel, left, top);
+      applyActionDockPosition(dockPosition.left, dockPosition.top);
+    }
 
-      document.documentElement.style.setProperty("--action-dock-left", `${Math.round(left)}px`);
-      document.documentElement.style.setProperty("--action-dock-top", `${Math.round(top)}px`);
+    function startActionDockDrag(event) {
+      if (window.matchMedia("(max-width: 720px)").matches || event.button !== 0) {
+        return;
+      }
+      const panel = event.target.closest(".player-actions.visible");
+      if (!panel || event.target.closest("button, input, select, textarea, label")) {
+        return;
+      }
+      const rect = panel.getBoundingClientRect();
+      if (event.clientY > rect.top + 30) {
+        return;
+      }
+      event.preventDefault();
+      dockActionPanel(panel);
+      actionDockDrag = {
+        panel,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        pointerId: event.pointerId
+      };
+      panel.classList.add("dragging");
+      panel.setPointerCapture?.(event.pointerId);
+    }
+
+    function moveActionDockDrag(event) {
+      if (!actionDockDrag) {
+        return;
+      }
+      event.preventDefault();
+      const dockPosition = clampActionDockPosition(
+        actionDockDrag.panel,
+        event.clientX - actionDockDrag.offsetX,
+        event.clientY - actionDockDrag.offsetY
+      );
+      applyActionDockPosition(dockPosition.left, dockPosition.top);
+    }
+
+    function endActionDockDrag(event) {
+      if (!actionDockDrag) {
+        return;
+      }
+      const panel = actionDockDrag.panel;
+      const rect = panel.getBoundingClientRect();
+      const dockPosition = clampActionDockPosition(panel, rect.left, rect.top);
+      applyActionDockPosition(dockPosition.left, dockPosition.top);
+      saveActionDockPosition(dockPosition.left, dockPosition.top);
+      panel.classList.remove("dragging");
+      panel.releasePointerCapture?.(actionDockDrag.pointerId ?? event.pointerId);
+      actionDockDrag = null;
+    }
+
+    function getSavedRulesDockPosition() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(rulesDockPositionKey) || "null");
+        if (Number.isFinite(saved?.left) && Number.isFinite(saved?.top)) {
+          return saved;
+        }
+      } catch {
+        return null;
+      }
+      return null;
+    }
+
+    function saveRulesDockPosition(left, top) {
+      localStorage.setItem(rulesDockPositionKey, JSON.stringify({
+        left: Math.round(left),
+        top: Math.round(top)
+      }));
+    }
+
+    function clampRulesDockPosition(left, top) {
+      const viewport = actionDockViewport();
+      const margin = 12;
+      const dockWidth = tableTextDock.offsetWidth || 420;
+      const dockHeight = Math.max(tableTextDock.offsetHeight || 94, 54);
+      return {
+        left: Math.min(Math.max(margin, left), Math.max(margin, viewport.width - dockWidth - margin)),
+        top: Math.min(Math.max(margin, top), Math.max(margin, viewport.height - dockHeight - margin))
+      };
+    }
+
+    function applyRulesDockPosition(left, top) {
+      document.documentElement.style.setProperty("--rules-dock-left", `${Math.round(left)}px`);
+      document.documentElement.style.setProperty("--rules-dock-top", `${Math.round(top)}px`);
+    }
+
+    function positionRulesDock() {
+      if (window.matchMedia("(max-width: 720px)").matches || !tableTextDock) {
+        return;
+      }
+      if (tableTextDock.parentNode !== document.body) {
+        document.body.appendChild(tableTextDock);
+      }
+      const savedPosition = getSavedRulesDockPosition();
+      if (savedPosition) {
+        const savedDock = clampRulesDockPosition(savedPosition.left, savedPosition.top);
+        applyRulesDockPosition(savedDock.left, savedDock.top);
+        saveRulesDockPosition(savedDock.left, savedDock.top);
+        return;
+      }
+      const tableRect = tableCenter.getBoundingClientRect();
+      const dockWidth = tableTextDock.offsetWidth || 420;
+      const defaultDock = clampRulesDockPosition(
+        tableRect.left + (tableRect.width / 2) - (dockWidth / 2),
+        tableRect.top + 96
+      );
+      applyRulesDockPosition(defaultDock.left, defaultDock.top);
+    }
+
+    function startRulesDockDrag(event) {
+      if (window.matchMedia("(max-width: 720px)").matches || event.button !== 0) {
+        return;
+      }
+      const dock = event.target.closest("#table-text-dock");
+      if (!dock) {
+        return;
+      }
+      const rect = dock.getBoundingClientRect();
+      if (event.clientY > rect.top + 30) {
+        return;
+      }
+      event.preventDefault();
+      rulesDockDrag = {
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        pointerId: event.pointerId
+      };
+      tableTextDock.classList.add("dragging");
+      tableTextDock.setPointerCapture?.(event.pointerId);
+    }
+
+    function moveRulesDockDrag(event) {
+      if (!rulesDockDrag) {
+        return;
+      }
+      event.preventDefault();
+      const dockPosition = clampRulesDockPosition(
+        event.clientX - rulesDockDrag.offsetX,
+        event.clientY - rulesDockDrag.offsetY
+      );
+      applyRulesDockPosition(dockPosition.left, dockPosition.top);
+    }
+
+    function endRulesDockDrag(event) {
+      if (!rulesDockDrag) {
+        return;
+      }
+      const rect = tableTextDock.getBoundingClientRect();
+      const dockPosition = clampRulesDockPosition(rect.left, rect.top);
+      applyRulesDockPosition(dockPosition.left, dockPosition.top);
+      saveRulesDockPosition(dockPosition.left, dockPosition.top);
+      tableTextDock.classList.remove("dragging");
+      tableTextDock.releasePointerCapture?.(rulesDockDrag.pointerId ?? event.pointerId);
+      rulesDockDrag = null;
     }
 
     function beginReadyUpPhase(nextDealer = nextOccupiedIndex(dealerIndex)) {
@@ -4050,7 +4397,7 @@
       clearSeatStatus();
       seats[index].classList.add("active");
       seats[index].querySelector(".seat-status").textContent = label;
-      if (["b52Draw", "sliderDraw", "fiveTenDraw"].includes(handState?.phase) && isUserSeat(index)) {
+      if (["b52Draw", "sliderDraw", "fiveTenDraw", "heartsDraw", "heartsPlay"].includes(handState?.phase) && isUserSeat(index)) {
         renderSeatHand(index);
       }
       addActionLog(`${label} action on ${seatName(index)}.`, true);
@@ -4073,6 +4420,7 @@
       fiveTenSettings.classList.toggle("visible", rules.kind === "fiveTen");
       treeBetSettings.classList.toggle("visible", rules.kind === "christmasTree");
       b52Settings.classList.toggle("visible", rules.kind === "b52");
+      heartsSettings.classList.toggle("visible", rules.kind === "heartsUp");
       grinnerSettings.classList.toggle("visible", rules.kind === "grinner");
       bingoSettings.classList.toggle("visible", rules.kind === "bingo");
       shotgunSettings.classList.toggle("visible", rules.kind === "shotgun");
@@ -4139,6 +4487,15 @@
         rulesPreview.innerHTML = `
           <span>Ante: players ${b52Ante.value}, dealer ${Number(b52Ante.value) + 1}</span>
           <span>${b52PayMode.value === "pot" ? "Losers pay the pot" : "Losers pay the player"}</span>
+          ${rules.preview.map((line) => `<span>${line}</span>`).join("")}
+        `;
+        return;
+      }
+
+      if (rules.kind === "heartsUp") {
+        rulesPreview.innerHTML = `
+          <span>Ante: everyone ${heartsAnte.value}; dealer tops up to make 3 even pots</span>
+          <span>Hearts are always trump. Win tricks to win stacks.</span>
           ${rules.preview.map((line) => `<span>${line}</span>`).join("")}
         `;
         return;
@@ -4275,6 +4632,8 @@
           ? `drawing ${fiveTenDrawBet.value}, showdown ${fiveTenShowBet.value}, ${fiveTenDirection.value} ${fiveTenSuit.value}`
           : rules.kind === "b52"
           ? `ante ${b52Ante.value}, ${b52PayMode.value === "pot" ? "pay the pot" : "pay the player"}`
+          : rules.kind === "heartsUp"
+          ? `ante ${heartsAnte.value}, hearts trump`
           : rules.kind === "grinner"
           ? `grinner bets ${grinnerBetInputs.map((input) => input.value).join(", ")}`
           : rules.kind === "bingo"
@@ -4298,7 +4657,7 @@
           : Number.isFinite(rules.betThreshold)
           ? `${rules.openingBetAtFourteen} when showing ${rules.betThreshold}+`
           : "no showing-point bump";
-        const betText = ["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen", "b52", "grinner", "bingo", "shotgun", "inbetween", "cincinnati", "circle", "mariah", "followQueen", "night", "potBlackjack"].includes(rules.kind)
+        const betText = ["littlePig", "christmasTree", "omaha", "sliderPig", "fiveTen", "b52", "heartsUp", "grinner", "bingo", "shotgun", "inbetween", "cincinnati", "circle", "mariah", "followQueen", "night", "potBlackjack"].includes(rules.kind)
           ? betBumpText
           : `bet ${rules.openingBet}, ${betBumpText}`;
         setTableMessage(`Loaded ${gameChoice.value}.`, `Ante: dealer ${rules.dealerAnte}, players ${rules.playerAnte}. ${betText}, max raises ${rules.maxRaises}.`);
@@ -4325,6 +4684,7 @@
     treeBetInputs.forEach((input) => input.addEventListener("input", updateRulesPreview));
     b52Ante.addEventListener("input", updateRulesPreview);
     b52PayMode.addEventListener("change", updateRulesPreview);
+    heartsAnte.addEventListener("input", updateRulesPreview);
     grinnerCardCount.addEventListener("change", updateRulesPreview);
     grinnerDirection.addEventListener("change", updateRulesPreview);
     grinnerFlimflam.addEventListener("change", updateRulesPreview);
@@ -4831,18 +5191,18 @@
 
       if (kind === "littlePig") {
         if (!canSeeFullSeatHand(index)) return "";
-        const declared = handState.declarations?.[index];
-        const scoreCards = littlePigHandCards(index);
-        const low = declared === "low" || declared === "both" ? lowBadgeName(evaluateLow(scoreCards)) : "";
-        const high = declared === "high" || declared === "both" ? highBadgeName(evaluateHigh(scoreCards)) : "";
+        const scoreCards = [...hole, ...board];
+        if (scoreCards.length < 5) return "";
+        const low = lowBadgeName(evaluateLow(scoreCards));
+        const high = highBadgeName(evaluateHigh(scoreCards));
         return splitBadge(low, high);
       }
 
       if (kind === "christmasTree") {
-        if (!canSeeFullSeatHand(index) || handState.communityRevealedRows < 4) return "";
-        const low = bestTreeLow(index);
-        const high = bestTreeHigh(index);
-        return splitBadge(low ? lowBadgeName(low) : "", highBadgeName(high));
+        if (!canSeeFullSeatHand(index)) return "";
+        const low = bestVisibleTreeLow(index);
+        const high = bestVisibleTreeHigh(index);
+        return splitBadge(low ? lowBadgeName(low) : "", high ? highBadgeName(high) : "");
       }
 
       if (kind === "omaha") {
@@ -4894,6 +5254,11 @@
 
       if (kind === "potBlackjack") {
         return hole.length ? `BJ ${blackjackBest(hole)}` : "";
+      }
+
+      if (kind === "heartsUp") {
+        const won = (handState.heartsTrickWinners || []).filter((winner) => winner === index).length;
+        return won ? `Tricks ${won}` : "";
       }
 
       return safeHighBadge(allVisible) ? `H:${safeHighBadge(allVisible)}` : "";
@@ -4966,11 +5331,14 @@
         }
 
         if (
-          handState.phase === "rolling"
+          (handState.phase === "rolling" || handState.phase === "heartsPlay")
           && isUserSeat(seatIndex)
           && handState.pending.has(seatIndex)
         ) {
           card.classList.add("roll-selectable");
+          if (handState.phase === "heartsPlay" && !heartsLegalCardIndexes(seatIndex).includes(cardIndex)) {
+            card.classList.add("disabled-card");
+          }
           if (selectedRollCardIndex === cardIndex) {
             card.classList.add("roll-selected");
           }
@@ -4978,7 +5346,7 @@
         }
 
         if (
-          (handState.phase === "pigDraw" || handState.phase === "b52Draw" || handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw")
+          (handState.phase === "pigDraw" || handState.phase === "b52Draw" || handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw" || handState.phase === "heartsDraw")
           && isUserSeat(seatIndex)
           && handState.pending.has(seatIndex)
         ) {
@@ -5041,7 +5409,11 @@
     }
 
     function selectRollCard(cardIndex) {
-      if (!handState || !["rolling", "nightFlip"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) {
+      if (!handState || !["rolling", "nightFlip", "heartsPlay"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) {
+        return;
+      }
+      if (handState.phase === "heartsPlay" && !heartsLegalCardIndexes(userSeatIndex).includes(cardIndex)) {
+        setTableMessage("Illegal card.", "You must follow the lead suit if you have it.");
         return;
       }
 
@@ -5274,6 +5646,25 @@
         return;
       }
 
+      if (handState.rules.kind === "heartsUp") {
+        const playedCards = handState.heartsTrickCards?.length
+          ? handState.heartsTrickCards
+          : handState.communityCards.map((card, index) => ({ index: null, card, playOrder: index }));
+        playedCards.forEach((entry) => {
+          const card = document.createElement("div");
+          card.className = "player-card";
+          buildCardFace(card, entry.card, handState.rules);
+          if (entry.index !== null) {
+            const label = document.createElement("div");
+            label.className = "card-choice-label";
+            label.textContent = seatName(entry.index);
+            card.appendChild(label);
+          }
+          communityCards.appendChild(card);
+        });
+        return;
+      }
+
       handState.communityCards.forEach((sampleCard, cardIndex) => {
         const card = document.createElement("div");
         card.className = "player-card";
@@ -5308,6 +5699,7 @@
     function revealNextCommunityCard() {
       handState.communityRevealed = Math.min(handState.communityCards.length, handState.communityRevealed + 1);
       renderCommunityCards();
+      refreshPointBadges();
       addActionLog(`Community card ${handState.communityRevealed} is revealed.`, true);
     }
 
@@ -5396,6 +5788,302 @@
       addActionLog("B52 draw begins.", true);
       setActiveSeat([...handState.pending][0], "Draw");
       scheduleNextAction();
+    }
+
+    function heartsLivePlayers() {
+      return activePlayerIndexes().filter((index) => handState.heartsPlayers?.has(index));
+    }
+
+    function nextHeartsPlayer(fromIndex) {
+      for (let offset = 1; offset <= seats.length; offset += 1) {
+        const index = (fromIndex + offset) % seats.length;
+        if (handState.heartsPlayers?.has(index) && !handState.folded[index]) {
+          return index;
+        }
+      }
+      return null;
+    }
+
+    function heartsPlayerOrderFrom(fromIndex) {
+      const order = [];
+      for (let offset = 1; offset <= seats.length; offset += 1) {
+        const index = (fromIndex + offset) % seats.length;
+        if (handState.heartsPlayers?.has(index) && !handState.folded[index]) {
+          order.push(index);
+        }
+      }
+      return order;
+    }
+
+    function collectHeartsAnte(rules) {
+      const players = occupiedIndexes();
+      const ante = Math.max(1, Number(heartsAnte.value) || 1);
+      pot = 0;
+      players.forEach((index) => {
+        pot += debitStack(index, ante);
+      });
+      const topUp = (3 - (pot % 3)) % 3;
+      if (topUp > 0) {
+        pot += debitStack(dealerIndex, topUp);
+        addActionLog(`${seatName(dealerIndex)} added ${topUp} to make 3 even pots.`, true);
+      }
+      handState.heartsPots = [pot / 3, pot / 3, pot / 3];
+      rules.dealerAnte = ante;
+      rules.playerAnte = ante;
+      updateStacks();
+      updatePot();
+    }
+
+    function dealHeartsRound() {
+      dealerIndex = handState.heartsDealer;
+      updateDealerPosition();
+      const players = heartsPlayerOrderFrom(handState.heartsDealer);
+      handState.deck = buildDeck();
+      handState.deckIndex = 0;
+      handState.hands = seats.map(() => []);
+      handState.upCards = seats.map(() => new Set());
+      handState.communityCards = [];
+      handState.heartsTrickNumber = 1;
+      handState.heartsTrickCards = [];
+      handState.heartsTrickWinners = [];
+      handState.heartsLead = players[0] ?? null;
+      players.forEach((index) => {
+        handState.folded[index] = false;
+      });
+      for (let round = 0; round < 3; round += 1) {
+        players.forEach((index) => {
+          const card = drawCard();
+          if (card) {
+            handState.hands[index].push(card);
+          }
+        });
+      }
+      renderAllHands();
+      renderCommunityCards();
+    }
+
+    function startHeartsDeclarePhase() {
+      handState.phase = "heartsDeclare";
+      handState.pending = new Set(heartsPlayerOrderFrom(handState.heartsDealer));
+      handState.heartsInPlayers = new Set();
+      setTableMessage("Hearts Up declare.", "Choose In or Fold. Folding removes you from this Hearts Up game.");
+      setActiveSeat([...handState.pending][0], "Declare");
+      scheduleNextAction();
+    }
+
+    function heartsDeclare(index, inHand) {
+      if (inHand || heartsLivePlayers().length <= 1) {
+        handState.heartsInPlayers.add(index);
+        handState.lastAction = `${seatName(index)} is in`;
+      } else {
+        handState.heartsPlayers.delete(index);
+        foldPlayer(index);
+        handState.lastAction = `${seatName(index)} folded out`;
+      }
+      handState.pending.delete(index);
+      addActionLog(handState.lastAction);
+    }
+
+    function finishHeartsDeclareIfReady() {
+      if (!handState || handState.phase !== "heartsDeclare") return;
+      if (handState.pending.size > 0) {
+        setActiveSeat([...handState.pending][0], "Declare");
+        scheduleNextAction();
+        return;
+      }
+      if (heartsLivePlayers().length <= 1) {
+        finishHeartsGame(heartsLivePlayers()[0] ?? handState.heartsDealer);
+        return;
+      }
+      startHeartsDrawPhase();
+    }
+
+    function startHeartsDrawPhase() {
+      handState.phase = "heartsDraw";
+      selectedPigCards = new Set();
+      const firstDrawer = nextHeartsPlayer(handState.heartsDealer);
+      handState.pending = new Set([firstDrawer].filter((index) => index !== null));
+      setTableMessage("Hearts Up draw.", "Stay pat or discard up to 3. You draw the same number.");
+      setActiveSeat(firstDrawer, "Draw");
+      scheduleNextAction();
+    }
+
+    function heartsDrawPlayer(index, discardIndexes) {
+      const discards = [...discardIndexes].sort((a, b) => b - a).slice(0, 3);
+      discards.forEach((cardIndex) => {
+        handState.hands[index].splice(cardIndex, 1);
+      });
+      discards.forEach(() => {
+        const card = drawCard();
+        if (card) {
+          handState.hands[index].push(card);
+        }
+      });
+      handState.lastAction = `${seatName(index)} ${discards.length ? `drew ${discards.length}` : "stayed pat"}`;
+      addActionLog(handState.lastAction);
+      renderSeatHand(index);
+      const firstDrawer = nextHeartsPlayer(handState.heartsDealer);
+      const nextIndex = nextHeartsPlayer(index);
+      if (nextIndex !== null && nextIndex !== firstDrawer) {
+        handState.pending = new Set([nextIndex]);
+        setActiveSeat(nextIndex, "Draw");
+        scheduleNextAction();
+        return;
+      }
+      startHeartsTrick(handState.heartsLead ?? firstDrawer);
+    }
+
+    function heartsCardValue(card) {
+      return highRankValue(card);
+    }
+
+    function heartsLegalCardIndexes(index) {
+      const hand = handState.hands[index] || [];
+      const leadSuit = handState.heartsLeadSuit;
+      if (!leadSuit) {
+        return hand.map((_, cardIndex) => cardIndex);
+      }
+      const matching = hand
+        .map((card, cardIndex) => ({ card, cardIndex }))
+        .filter((entry) => entry.card.suitName === leadSuit)
+        .map((entry) => entry.cardIndex);
+      return matching.length ? matching : hand.map((_, cardIndex) => cardIndex);
+    }
+
+    function startHeartsTrick(leadIndex) {
+      handState.phase = "heartsPlay";
+      handState.heartsTrickCards = [];
+      handState.heartsLeadSuit = null;
+      handState.communityCards = [];
+      handState.pending = new Set([leadIndex]);
+      selectedRollCardIndex = null;
+      renderCommunityCards();
+      setTableMessage(`Hearts Up trick ${handState.heartsTrickNumber}.`, `${seatName(leadIndex)} leads. Hearts are trump.`);
+      setActiveSeat(leadIndex, "Play");
+      scheduleNextAction();
+    }
+
+    function heartsTrickWinner() {
+      const played = handState.heartsTrickCards;
+      const hearts = played.filter((entry) => entry.card.suitName === "hearts");
+      const contenders = hearts.length ? hearts : played.filter((entry) => entry.card.suitName === handState.heartsLeadSuit);
+      return contenders.sort((a, b) => heartsCardValue(b.card) - heartsCardValue(a.card))[0].index;
+    }
+
+    function playHeartsCard(index, cardIndex) {
+      if (!handState || handState.phase !== "heartsPlay" || activeIndex !== index) return;
+      if (!heartsLegalCardIndexes(index).includes(cardIndex)) {
+        setTableMessage("Illegal card.", "You must follow the lead suit if you have it.");
+        return;
+      }
+      const [card] = handState.hands[index].splice(cardIndex, 1);
+      if (!handState.heartsLeadSuit) {
+        handState.heartsLeadSuit = card.suitName;
+      }
+      handState.heartsTrickCards.push({ index, card });
+      handState.communityCards = handState.heartsTrickCards.map((entry) => entry.card);
+      handState.lastAction = `${seatName(index)} played ${cardHistoryText(card)}`;
+      addActionLog(handState.lastAction);
+      renderSeatHand(index);
+      renderCommunityCards();
+
+      if (handState.heartsTrickCards.length >= heartsLivePlayers().length) {
+        finishHeartsTrick();
+        return;
+      }
+      const nextIndex = nextHeartsPlayer(index);
+      handState.pending = new Set([nextIndex]);
+      setActiveSeat(nextIndex, "Play");
+      scheduleNextAction();
+    }
+
+    function finishHeartsTrick() {
+      const winner = heartsTrickWinner();
+      handState.heartsTrickWinners.push(winner);
+      seats[winner].querySelector(".seat-status").textContent = `Trick ${handState.heartsTrickNumber}`;
+      refreshPointBadges();
+      addActionLog(`${seatName(winner)} wins trick ${handState.heartsTrickNumber}.`, true);
+      handState.heartsTrickNumber += 1;
+      handState.heartsLead = winner;
+      activeIndex = null;
+      if (handState.heartsTrickNumber > 3) {
+        finishHeartsRound();
+        return;
+      }
+      setTimeout(() => {
+        if (!handState || handState.rules.kind !== "heartsUp") return;
+        startHeartsTrick(winner);
+      }, 900);
+    }
+
+    function finishHeartsRound() {
+      const winners = handState.heartsTrickWinners;
+      const winnerCounts = winners.reduce((map, index) => ({ ...map, [index]: (map[index] || 0) + 1 }), {});
+      winners.forEach((index, trickIndex) => {
+        creditStack(index, handState.heartsPots[trickIndex] || 0);
+      });
+      const roundPot = handState.heartsPots.reduce((total, amount) => total + amount, 0);
+      const losers = heartsLivePlayers().filter((index) => !winnerCounts[index]);
+      pot = 0;
+      losers.forEach((index) => {
+        pot += debitStack(index, roundPot);
+      });
+      const topUp = pot > 0 ? (3 - (pot % 3)) % 3 : 0;
+      if (topUp > 0) {
+        pot += debitStack(handState.heartsDealer, topUp);
+        addActionLog(`${seatName(handState.heartsDealer)} added ${topUp} to split the new pot evenly.`, true);
+      }
+      handState.heartsPots = pot > 0 ? [pot / 3, pot / 3, pot / 3] : [0, 0, 0];
+      updateStacks();
+      updatePot();
+
+      const summary = winners.map((index, trickIndex) => `T${trickIndex + 1}: ${seatName(index)}`).join(", ");
+      setTableMessage("Hearts Up round complete.", `${summary}. Trickless players matched ${roundPot}.`);
+      addActionLog(`Hearts Up round: ${summary}.`, true);
+
+      if (heartsLivePlayers().length <= 1) {
+        finishHeartsGame(heartsLivePlayers()[0] ?? winners[0]);
+        return;
+      }
+
+      if (losers.length === 0) {
+        finishHeartsGame(null, "Everyone won at least one trick.");
+        return;
+      }
+
+      handState.heartsRound += 1;
+      handState.heartsDealer = nextHeartsPlayer(handState.heartsDealer);
+      dealHeartsRound();
+      startHeartsDeclarePhase();
+    }
+
+    function finishHeartsGame(winnerIndex, reason = "") {
+      clearSeatStatus();
+      hideActionPanels();
+      const paidPot = pot;
+      if (winnerIndex !== null && paidPot > 0) {
+        creditStack(winnerIndex, paidPot);
+      }
+      pot = 0;
+      updateStacks();
+      updatePot();
+      const resultText = winnerIndex === null
+        ? reason || "The game ended."
+        : `${seatName(winnerIndex)} wins the remaining pot.`;
+      setTableMessage("Hearts Up complete.", resultText);
+      addActionLog(`Hearts Up complete. ${resultText}`, true);
+      handNumber += 1;
+      appendHistory(`
+        <strong>Hand ${handNumber}: Hearts Up</strong><br>
+        ${winnerIndex === null ? resultText : `Winner: ${seatName(winnerIndex)}`}<br>
+        Last tricks: ${(handState.heartsTrickWinners || []).map((index, trickIndex) => `T${trickIndex + 1} ${seatName(index)}`).join(", ")}
+      `);
+      const nextOriginalDealer = handState.originalDealerIndex !== undefined ? nextOccupiedIndex(handState.originalDealerIndex) : nextOccupiedIndex(dealerIndex);
+      if (handState.originalDealerIndex !== undefined) {
+        dealerIndex = handState.originalDealerIndex;
+        updateDealerPosition();
+      }
+      beginReadyUpPhase(nextOriginalDealer);
     }
 
     function b52DrawPlayer(index, discardIndexes) {
@@ -5575,6 +6263,7 @@
     function revealTreeRow(rowNumber) {
       handState.communityRevealedRows = Math.max(handState.communityRevealedRows, rowNumber);
       renderCommunityCards();
+      refreshPointBadges();
       addActionLog(`Christmas Tree row ${rowNumber} is revealed.`, true);
     }
 
@@ -5733,7 +6422,7 @@
     }
 
     function togglePigDiscard(cardIndex) {
-      if (!handState || !["pigDraw", "b52Draw", "sliderDraw", "fiveTenDraw"].includes(handState.phase)) {
+      if (!handState || !["pigDraw", "b52Draw", "sliderDraw", "fiveTenDraw", "heartsDraw"].includes(handState.phase)) {
         return;
       }
 
@@ -5743,7 +6432,7 @@
         selectedPigCards.add(cardIndex);
       }
 
-      const sameCountDraw = handState.phase === "b52Draw" || handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw";
+      const sameCountDraw = handState.phase === "b52Draw" || handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw" || handState.phase === "heartsDraw";
       pigDrawButton.disabled = sameCountDraw
         ? selectedPigCards.size > 3
         : selectedPigCards.size < 1 || selectedPigCards.size > 4;
@@ -5990,7 +6679,7 @@
       if (!handState || (!isUserSeat(activeIndex) && !hasPendingUserChoice())) {
         return;
       }
-      if (["rolling", "pigReveal", "pigDeclare"].includes(handState.phase) && !handState.pending.has(userSeatIndex)) {
+      if (["rolling", "pigReveal", "pigDeclare", "heartsDeclare", "heartsDraw", "heartsPlay"].includes(handState.phase) && !handState.pending.has(userSeatIndex)) {
         return;
       }
 
@@ -6053,12 +6742,17 @@
         setTableMessage("Your 5/10 declaration.", `Choose In for ${handState.fiveTenDrawBet} or fold.`);
       }
 
-      if (handState.phase === "b52Draw") {
+      if (handState.phase === "heartsDeclare") {
+        inoutActions.classList.add("visible");
+        setTableMessage("Your Hearts Up declaration.", "Choose In or Fold out of this Hearts Up game.");
+      }
+
+      if (handState.phase === "b52Draw" || handState.phase === "heartsDraw") {
         pigDrawButton.textContent = selectedPigCards.size === 0 ? "Stand Pat" : `Discard / Draw ${selectedPigCards.size}`;
         pigDrawButton.disabled = selectedPigCards.size > 3;
         pigDrawActions.classList.add("visible");
         renderSeatHand(userSeatIndex);
-        setTableMessage("Your B52 draw.", "Select up to 3 cards to discard, or draw 0.");
+        setTableMessage(handState.phase === "heartsDraw" ? "Your Hearts Up draw." : "Your B52 draw.", "Select up to 3 cards to discard, or draw 0.");
       }
 
       if (handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw") {
@@ -6076,13 +6770,16 @@
 
       if (handState.phase === "inbetweenAction") {
         const maxWager = inBetweenMaxWager();
+        const canSplitPair = canSplitInBetweenPair(userSeatIndex);
         inbetweenWager.max = maxWager;
         inbetweenWager.value = Math.min(Math.max(1, Number(inbetweenWager.value) || 1), maxWager);
         inbetweenPass.disabled = false;
+        inbetweenSplit.hidden = !canSplitPair;
+        inbetweenSplit.disabled = !canSplitPair;
         inbetweenBet.disabled = maxWager < 1;
         inbetweenBet.textContent = `Bet up to ${maxWager}`;
         inbetweenActions.classList.add("visible");
-        setTableMessage("Your In Between action.", "Pass or wager against the pot.");
+        setTableMessage("Your In Between action.", canSplitPair ? "Pass, split the pair, or wager against the pot." : "Pass or wager against the pot.");
       }
 
       if (handState.phase === "mariahLastChoice") {
@@ -6096,6 +6793,14 @@
         nightActions.classList.add("visible");
         renderSeatHand(userSeatIndex);
         setTableMessage("Night Baseball.", "Pick a facedown card to flip, or fold.");
+      }
+
+      if (handState.phase === "heartsPlay") {
+        rollButton.textContent = "Play";
+        rollButton.disabled = selectedRollCardIndex === null;
+        rollActions.classList.add("visible");
+        renderSeatHand(userSeatIndex);
+        setTableMessage("Your Hearts Up play.", "Choose one legal card to play.");
       }
 
       if (handState.phase === "nightExtra") {
@@ -6681,12 +7386,12 @@
       return sorted.filter((entry) => compareScore(entry.score, best) === 0).map((entry) => entry.index);
     }
 
-    function treeBoardRows() {
-      return [0, 1, 2, 3].map((rowIndex) => treeRowCards(rowIndex));
+    function treeBoardRows(maxRows = 4) {
+      return [0, 1, 2, 3].slice(0, maxRows).map((rowIndex) => treeRowCards(rowIndex));
     }
 
-    function treeBoardCombos(size = null) {
-      const rows = treeBoardRows();
+    function treeBoardCombos(size = null, maxRows = 4) {
+      const rows = treeBoardRows(maxRows);
       const onePerRow = [[]];
       rows.forEach((row) => {
         const current = [...onePerRow];
@@ -6694,14 +7399,14 @@
           row.forEach((card) => onePerRow.push([...combo, card]));
         });
       });
-      const bottomRowOnly = [rows[3]];
+      const bottomRowOnly = rows[3] ? [rows[3]] : [];
       const combos = [...onePerRow, ...bottomRowOnly];
       return combos.filter((combo) => size === null || combo.length === size);
     }
 
-    function treeCandidateHands(index) {
+    function treeCandidateHands(index, maxRows = 4) {
       const handCards = handState.hands[index];
-      const boardCombos = treeBoardCombos(handState.rules.omaha ? 3 : null);
+      const boardCombos = treeBoardCombos(handState.rules.omaha ? 3 : null, maxRows);
 
       if (handState.rules.omaha) {
         return combinations(handCards, 2).flatMap((holeCards) => (
@@ -6744,6 +7449,19 @@
 
     function bestTreeLow(index) {
       return treeCandidateHands(index)
+        .map(evaluateTreeLowFive)
+        .filter(Boolean)
+        .sort(compareScore)[0] || null;
+    }
+
+    function bestVisibleTreeHigh(index) {
+      return treeCandidateHands(index, handState.communityRevealedRows || 0)
+        .map(evaluateHighFive)
+        .sort((a, b) => compareScore(b, a))[0];
+    }
+
+    function bestVisibleTreeLow(index) {
+      return treeCandidateHands(index, handState.communityRevealedRows || 0)
         .map(evaluateTreeLowFive)
         .filter(Boolean)
         .sort(compareScore)[0] || null;
@@ -7555,6 +8273,24 @@
       return inbetweenConnectors.checked || inbetweenSuited.checked ? 1 : 0;
     }
 
+    function isInBetweenPair(leftCard, rightCard) {
+      if (!leftCard || !rightCard) return false;
+      const left = inBetweenRankValue(leftCard, handState.inBetweenAceChoice);
+      const right = inBetweenRankValue(rightCard, rightCard.rank === "A" ? "high" : null);
+      return left === right;
+    }
+
+    function canSplitInBetweenPair(index = activeIndex) {
+      if (!handState || handState.rules.kind !== "inbetween" || handState.phase !== "inbetweenAction") {
+        return false;
+      }
+      if (!inbetweenSplitting.checked || handState.inBetweenSplit) {
+        return false;
+      }
+      const [leftCard, , rightCard] = handState.communityCards;
+      return isInBetweenPair(leftCard, rightCard) && availableStack(index) >= 4;
+    }
+
     function applyInBetweenPenalty(index) {
       const [leftCard, , rightCard] = handState.communityCards;
       const penalty = inBetweenConnectorPenalty(leftCard, rightCard);
@@ -7563,6 +8299,70 @@
       updateStacks();
       updatePot();
       addActionLog(`${seatName(index)} pays ${penalty} for connectors/pair.`, true);
+    }
+
+    function setInBetweenAction(index, reason) {
+      const maxWager = inBetweenMaxWager();
+      const prefix = reason ? `${reason} ` : "";
+      setActiveSeat(index, "Wager");
+      setTableMessage("In Between the Sheets.", `${prefix}${seatName(index)} may pass or wager up to ${maxWager}.`);
+      scheduleNextAction();
+    }
+
+    function startInBetweenSplitRight(index) {
+      const split = handState.inBetweenSplit;
+      if (!split) return;
+      split.stage = "right";
+      split.rightOutside = inBetweenDrawCard();
+      handState.communityCards = [split.originalRight, null, split.rightOutside];
+      handState.inBetweenAceChoice = null;
+      renderCommunityCards();
+      applyInBetweenPenalty(index);
+      setInBetweenAction(index, "Split right side.");
+    }
+
+    async function finishInBetweenChoice(index, delay = IN_BETWEEN_RESULT_DELAY) {
+      await wait(delay);
+      if (!handState || handState.rules.kind !== "inbetween") return;
+
+      if (handState.inBetweenSplit?.stage === "left") {
+        startInBetweenSplitRight(index);
+        return;
+      }
+
+      if (handState.inBetweenSplit?.stage === "right") {
+        const split = handState.inBetweenSplit;
+        handState.communityCards = [split.leftOutside, handState.communityCards[1], split.rightOutside];
+        handState.inBetweenSplit = null;
+        renderCommunityCards();
+      }
+
+      handState.inBetweenTurnsCompleted += 1;
+      startInBetweenTurn(nextOccupiedIndex(index));
+    }
+
+    async function splitInBetweenPair(index) {
+      if (!canSplitInBetweenPair(index)) return;
+      hideActionPanels();
+      const [leftCard, middleCard, rightCard] = handState.communityCards;
+      const paid = debitStack(index, 4);
+      pot += paid;
+      updateStacks();
+      updatePot();
+      handState.inBetweenSplit = {
+        stage: "left",
+        originalLeft: leftCard,
+        originalRight: rightCard,
+        originalMiddle: middleCard,
+        leftOutside: inBetweenDrawCard(),
+        rightOutside: null
+      };
+      handState.communityCards = [handState.inBetweenSplit.leftOutside, null, leftCard];
+      handState.inBetweenAceChoice = null;
+      renderCommunityCards();
+      applyInBetweenPenalty(index);
+      addActionLog(`${seatName(index)} split the pair for ${paid}.`, true);
+      setInBetweenAction(index, "Split left side.");
     }
 
     async function startInBetweenTurn(index = nextOccupiedIndex(dealerIndex)) {
@@ -7595,10 +8395,7 @@
       handState.communityCards[2] = inBetweenDrawCard();
       renderCommunityCards();
       applyInBetweenPenalty(index);
-      const maxWager = inBetweenMaxWager();
-      setActiveSeat(index, "Wager");
-      setTableMessage("In Between the Sheets.", `${seatName(index)} may pass or wager up to ${maxWager}.`);
-      scheduleNextAction();
+      setInBetweenAction(index, "");
     }
 
     async function chooseInBetweenAce(index, choice) {
@@ -7631,13 +8428,10 @@
 
     async function inBetweenPass(index) {
       hideActionPanels();
-      handState.inBetweenTurnsCompleted += 1;
       handState.lastAction = `${seatName(index)} passed`;
       addActionLog(handState.lastAction);
       setTableMessage("In Between the Sheets.", `${seatName(index)} passed.`);
-      await wait(IN_BETWEEN_RESULT_DELAY * 0.65);
-      if (!handState || handState.rules.kind !== "inbetween") return;
-      startInBetweenTurn(nextOccupiedIndex(index));
+      await finishInBetweenChoice(index, IN_BETWEEN_RESULT_DELAY * 0.65);
     }
 
     async function inBetweenResolve(index, amount) {
@@ -7673,7 +8467,6 @@
 
       updateStacks();
       updatePot();
-      handState.inBetweenTurnsCompleted += 1;
       handState.lastAction = `${seatName(index)} ${resultText}`;
       addActionLog(handState.lastAction, true);
       setTableMessage("In Between result.", `${seatName(index)} ${resultText}.`);
@@ -7685,9 +8478,7 @@
         return;
       }
 
-      await wait(IN_BETWEEN_RESULT_DELAY);
-      if (!handState || handState.rules.kind !== "inbetween") return;
-      startInBetweenTurn(nextOccupiedIndex(index));
+      await finishInBetweenChoice(index);
     }
 
     function computerInBetweenAction(index) {
@@ -7695,6 +8486,11 @@
         const [leftCard, , rightCard] = handState.communityCards;
         const otherCard = leftCard?.rank === "A" ? rightCard : leftCard;
         chooseInBetweenAce(index, otherCard && highRankValue(otherCard) >= 8 ? "low" : "high");
+        return;
+      }
+
+      if (canSplitInBetweenPair(index) && Math.random() < 0.7) {
+        splitInBetweenPair(index);
         return;
       }
 
@@ -7708,6 +8504,43 @@
       }
       const wager = Math.max(1, Math.ceil(maxWager * clamp(0.2 + confidence * 0.55, 0.2, 0.75)));
       inBetweenResolve(index, wager);
+    }
+
+    function computerHeartsDeclare(index) {
+      const hearts = handState.hands[index].filter((card) => card.suitName === "hearts").length;
+      const highCards = handState.hands[index].filter((card) => highRankValue(card) >= 11).length;
+      const shouldPlay = hearts + highCards >= 2 || Math.random() < 0.45;
+      heartsDeclare(index, shouldPlay);
+      finishHeartsDeclareIfReady();
+      if (handState?.phase === "heartsDeclare") {
+        const nextIndex = [...handState.pending][0];
+        setActiveSeat(nextIndex, "Declare");
+        scheduleNextAction();
+      }
+    }
+
+    function computerHeartsDraw(index) {
+      const discardIndexes = handState.hands[index]
+        .map((card, cardIndex) => ({ card, cardIndex }))
+        .filter((entry) => entry.card.suitName !== "hearts" && highRankValue(entry.card) < 11)
+        .slice(0, 2)
+        .map((entry) => entry.cardIndex);
+      heartsDrawPlayer(index, new Set(discardIndexes));
+    }
+
+    function computerHeartsPlay(index) {
+      const legalIndexes = heartsLegalCardIndexes(index);
+      const scored = legalIndexes.map((cardIndex) => {
+        const card = handState.hands[index][cardIndex];
+        const trumpBonus = card.suitName === "hearts" ? 30 : 0;
+        const leadBonus = card.suitName === handState.heartsLeadSuit ? 10 : 0;
+        return { cardIndex, score: trumpBonus + leadBonus + heartsCardValue(card) };
+      });
+      const shouldSaveTrump = handState.heartsLeadSuit && handState.heartsLeadSuit !== "hearts";
+      const sorted = scored.sort((a, b) => (
+        shouldSaveTrump ? a.score - b.score : b.score - a.score
+      ));
+      playHeartsCard(index, sorted[0].cardIndex);
     }
 
     function cincinnatiBetAmount() {
@@ -9490,6 +10323,12 @@
         computerFiveTenDeclare(activeIndex);
       } else if (handState.phase === "b52Draw") {
         computerB52Draw(activeIndex);
+      } else if (handState.phase === "heartsDeclare") {
+        computerHeartsDeclare(activeIndex);
+      } else if (handState.phase === "heartsDraw") {
+        computerHeartsDraw(activeIndex);
+      } else if (handState.phase === "heartsPlay") {
+        computerHeartsPlay(activeIndex);
       }
     }
 
@@ -9624,6 +10463,10 @@
         rules.playerAnte = Math.max(1, Number(inbetweenAnte.value) || 1);
         rules.dealerAnte = rules.playerAnte + 1;
       }
+      if (rules.kind === "heartsUp") {
+        rules.playerAnte = Math.max(1, Number(heartsAnte.value) || 1);
+        rules.dealerAnte = rules.playerAnte;
+      }
       if (rules.kind === "cincinnati") {
         rules.cardsPerPlayer = Number(cincinnatiCardCount.value);
       }
@@ -9666,6 +10509,8 @@
           discardedUpCards: seats.map(() => new Set()),
           communityCards: rules.kind === "inbetween"
             ? [null, null, null]
+            : rules.kind === "heartsUp"
+            ? []
             : ["littlePig", "christmasTree", "omaha", "sliderPig", "b52", "grinner", "bingo", "shotgun", "cincinnati", "circle", "night"].includes(rules.kind)
             ? deck.slice(rules.cardsPerPlayer * players.length, rules.cardsPerPlayer * players.length + rules.communityCards)
             : null,
@@ -9682,6 +10527,7 @@
           pending: new Set(),
           lastAction: `${seatName(dealerIndex)} dealt ${rules.name}`,
           dealerOptions: currentDealerOptionsText(rules),
+          originalDealerIndex: dealerIndex,
           pigStage: 0,
           lastBetStarter: dealerIndex,
           preDrawBet: Math.max(1, Number(pigPreBet.value) || 1),
@@ -9714,6 +10560,15 @@
           cincinnatiSplitIndex: Math.max(0, Number(cincinnatiSplitCard.value) - 1),
           inBetweenTurnsCompleted: 0,
           inBetweenAceChoice: null,
+          heartsPlayers: new Set(players),
+          heartsPots: [0, 0, 0],
+          heartsDealer: dealerIndex,
+          heartsRound: 1,
+          heartsLead: nextOccupiedIndex(dealerIndex),
+          heartsTrickNumber: 1,
+          heartsTrickCards: [],
+          heartsTrickWinners: [],
+          heartsLeadSuit: null,
           circleRound: 0,
           circleBets: circleBetInputs.map((input) => Math.max(1, Number(input.value) || 1)),
           circleSplitterOn: circleSplitter.checked,
@@ -9759,6 +10614,8 @@
           pot = debitStack(dealerIndex, pot);
           updateStacks();
           updatePot();
+        } else if (rules.kind === "heartsUp") {
+          collectHeartsAnte(rules);
         } else {
           collectAntes(rules);
         }
@@ -9810,6 +10667,10 @@
         } else if (rules.kind === "inbetween") {
           renderCommunityCards();
           startInBetweenTurn(nextOccupiedIndex(dealerIndex));
+        } else if (rules.kind === "heartsUp") {
+          dealHeartsRound();
+          handState.heartsLead = nextHeartsPlayer(handState.heartsDealer);
+          startHeartsDrawPhase();
         } else if (rules.kind === "cincinnati") {
           renderCommunityCards();
           handState.cincinnatiRound = 1;
@@ -9958,6 +10819,23 @@
     rollButton.addEventListener("click", async () => {
       if (
         handState
+        && handState.phase === "heartsPlay"
+        && handState.pending.has(userSeatIndex)
+        && selectedRollCardIndex !== null
+      ) {
+        if (await sendOnlineAction("playCard", { cardIndex: selectedRollCardIndex })) {
+          selectedRollCardIndex = null;
+          rollButton.disabled = true;
+          return;
+        }
+        playHeartsCard(userSeatIndex, selectedRollCardIndex);
+        selectedRollCardIndex = null;
+        rollButton.disabled = true;
+        return;
+      }
+
+      if (
+        handState
         && handState.phase === "pigReveal"
         && handState.pending.has(userSeatIndex)
         && selectedRollCardIndex !== null
@@ -10010,6 +10888,8 @@
 
       if (handState.phase === "b52Draw") {
         b52DrawPlayer(userSeatIndex, selectedPigCards);
+      } else if (handState.phase === "heartsDraw") {
+        heartsDrawPlayer(userSeatIndex, selectedPigCards);
       } else if (handState.phase === "sliderDraw" || handState.phase === "fiveTenDraw") {
         drawSameCountPlayer(userSeatIndex, selectedPigCards);
       } else if (handState.phase === "pigDraw") {
@@ -10019,7 +10899,9 @@
       }
       selectedPigCards = new Set();
       pigDrawButton.disabled = true;
-      advanceAfterAction();
+      if (handState?.phase !== "heartsDraw" && handState?.rules?.kind !== "heartsUp") {
+        advanceAfterAction();
+      }
     });
 
     declareLow.addEventListener("click", async () => {
@@ -10035,39 +10917,60 @@
       declareLittlePig(userSeatIndex, "both");
     });
     declareIn.addEventListener("click", async () => {
-      if (!handState || !["b52Declare", "fiveTenDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
+      if (!handState || !["b52Declare", "fiveTenDeclare", "heartsDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
       if (await sendOnlineAction("declareIn")) return;
+      const wasHeartsDeclare = handState.phase === "heartsDeclare";
       if (handState.phase === "fiveTenDeclare") {
         fiveTenDeclare(userSeatIndex, true);
+      } else if (handState.phase === "heartsDeclare") {
+        heartsDeclare(userSeatIndex, true);
+        finishHeartsDeclareIfReady();
       } else {
         b52Declare(userSeatIndex, true);
       }
-      advanceAfterAction();
+      if (!wasHeartsDeclare) {
+        advanceAfterAction();
+      }
     });
     declareOut.addEventListener("click", async () => {
-      if (!handState || !["b52Declare", "fiveTenDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
+      if (!handState || !["b52Declare", "fiveTenDeclare", "heartsDeclare"].includes(handState.phase) || !handState.pending.has(userSeatIndex)) return;
       if (await sendOnlineAction("declareOut")) return;
+      const wasHeartsDeclare = handState.phase === "heartsDeclare";
       if (handState.phase === "fiveTenDeclare") {
         fiveTenDeclare(userSeatIndex, false);
+      } else if (handState.phase === "heartsDeclare") {
+        heartsDeclare(userSeatIndex, false);
+        finishHeartsDeclareIfReady();
       } else {
         b52Declare(userSeatIndex, false);
       }
-      advanceAfterAction();
+      if (!wasHeartsDeclare) {
+        advanceAfterAction();
+      }
     });
-    inbetweenPass.addEventListener("click", () => {
+    inbetweenPass.addEventListener("click", async () => {
       if (!handState || handState.phase !== "inbetweenAction" || activeIndex !== userSeatIndex) return;
+      if (await sendOnlineAction("inbetweenPass")) return;
       inBetweenPass(userSeatIndex);
     });
-    inbetweenBet.addEventListener("click", () => {
+    inbetweenSplit.addEventListener("click", async () => {
       if (!handState || handState.phase !== "inbetweenAction" || activeIndex !== userSeatIndex) return;
+      if (await sendOnlineAction("inbetweenSplit")) return;
+      splitInBetweenPair(userSeatIndex);
+    });
+    inbetweenBet.addEventListener("click", async () => {
+      if (!handState || handState.phase !== "inbetweenAction" || activeIndex !== userSeatIndex) return;
+      if (await sendOnlineAction("inbetweenBet", { amount: Number(inbetweenWager.value) || 1 })) return;
       inBetweenResolve(userSeatIndex, Number(inbetweenWager.value) || 1);
     });
-    aceLow.addEventListener("click", () => {
+    aceLow.addEventListener("click", async () => {
       if (!handState || handState.phase !== "inbetweenAce" || activeIndex !== userSeatIndex) return;
+      if (await sendOnlineAction("aceLow")) return;
       chooseInBetweenAce(userSeatIndex, "low");
     });
-    aceHigh.addEventListener("click", () => {
+    aceHigh.addEventListener("click", async () => {
       if (!handState || handState.phase !== "inbetweenAce" || activeIndex !== userSeatIndex) return;
+      if (await sendOnlineAction("aceHigh")) return;
       chooseInBetweenAce(userSeatIndex, "high");
     });
     mariahUp.addEventListener("click", () => {
@@ -10141,7 +11044,18 @@
 
     nextActionButton.addEventListener("click", runSteppedAction);
     endB52Test.addEventListener("click", endB52ForTesting);
-    window.addEventListener("resize", positionActionDock);
+    window.addEventListener("resize", () => {
+      positionActionDock();
+      positionRulesDock();
+    });
+    document.addEventListener("pointerdown", startActionDockDrag);
+    document.addEventListener("pointermove", moveActionDockDrag);
+    document.addEventListener("pointerup", endActionDockDrag);
+    document.addEventListener("pointercancel", endActionDockDrag);
+    document.addEventListener("pointerdown", startRulesDockDrag);
+    document.addEventListener("pointermove", moveRulesDockDrag);
+    document.addEventListener("pointerup", endRulesDockDrag);
+    document.addEventListener("pointercancel", endRulesDockDrag);
 
     seats.forEach((seat, index) => {
       seat.addEventListener("pointerdown", (event) => {
@@ -10309,6 +11223,7 @@
     updateOnlineControls();
     renderSeating();
     updatePot();
+    requestAnimationFrame(positionRulesDock);
   </script>
 </body>
 </html>
