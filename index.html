@@ -3971,24 +3971,39 @@
       return document.querySelector(".player-actions.visible");
     }
 
+    function dockActionPanel(panel) {
+      if (!panel || panel.parentNode === document.body) {
+        return;
+      }
+      document.body.appendChild(panel);
+    }
+
     function positionActionDock() {
       const panel = visibleActionPanel();
-      if (!panel || window.matchMedia("(max-width: 720px)").matches || !seats[userSeatIndex]) {
+      if (!panel) {
+        return;
+      }
+      dockActionPanel(panel);
+      if (window.matchMedia("(max-width: 720px)").matches || !seats[userSeatIndex]) {
         return;
       }
 
       const seatRect = seats[userSeatIndex].getBoundingClientRect();
       const panelWidth = panel.classList.contains("single-action") ? 190 : 300;
       const panelHeight = Math.max(panel.offsetHeight || 90, 54);
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
       const margin = 12;
       let left = seatRect.right + margin;
-      if (left + panelWidth > window.innerWidth - margin) {
+      if (left + panelWidth > viewportWidth - margin) {
         left = Math.max(margin, seatRect.left - panelWidth - margin);
       }
+      left = Math.min(Math.max(margin, left), Math.max(margin, viewportWidth - panelWidth - margin));
       let top = seatRect.top + Math.round(seatRect.height * 0.56);
-      if (top + panelHeight > window.innerHeight - margin) {
+      if (top + panelHeight > viewportHeight - margin) {
         top = Math.max(margin, seatRect.bottom - panelHeight);
       }
+      top = Math.min(Math.max(margin, top), Math.max(margin, viewportHeight - panelHeight - margin));
 
       document.documentElement.style.setProperty("--action-dock-left", `${Math.round(left)}px`);
       document.documentElement.style.setProperty("--action-dock-top", `${Math.round(top)}px`);
