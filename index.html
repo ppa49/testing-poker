@@ -1269,6 +1269,357 @@
       .seat-7 { left: 12%; top: 50%; }
       .seat-8 { left: 18%; top: 16%; }
     }
+    /* Casino table skin */
+    body {
+      background:
+        radial-gradient(circle at 50% 18%, rgba(96, 126, 143, 0.28), transparent 34%),
+        radial-gradient(circle at 16% 84%, rgba(160, 78, 28, 0.16), transparent 26%),
+        linear-gradient(145deg, #222832, #0c0d10 72%);
+    }
+
+    .table-wrap {
+      filter: drop-shadow(0 34px 42px rgba(0, 0, 0, 0.48));
+    }
+
+    .table {
+      border-width: clamp(22px, 3.4vw, 40px);
+      border-color: #1d1e20;
+      background:
+        radial-gradient(ellipse at 50% 28%, rgba(255, 255, 255, 0.24), transparent 12%),
+        radial-gradient(ellipse at center, rgba(54, 255, 126, 0.28), transparent 58%),
+        repeating-radial-gradient(ellipse at center, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 9px),
+        linear-gradient(160deg, #16b344 0%, #07833d 46%, #056430 100%);
+      box-shadow:
+        inset 0 0 0 5px #55585a,
+        inset 0 0 0 10px #101214,
+        inset 0 18px 34px rgba(255, 255, 255, 0.18),
+        inset 0 -34px 55px rgba(0, 0, 0, 0.34),
+        0 0 0 7px rgba(139, 99, 55, 0.62),
+        0 30px 64px rgba(0, 0, 0, 0.58);
+    }
+
+    .table::before {
+      content: "";
+      position: absolute;
+      inset: -18px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.16);
+      pointer-events: none;
+    }
+
+    .table::after {
+      content: "RIVERFORGE";
+      position: absolute;
+      left: 50%;
+      top: 54%;
+      transform: translate(-50%, -50%);
+      color: rgba(0, 28, 14, 0.18);
+      font-size: clamp(28px, 5vw, 54px);
+      font-weight: 900;
+      letter-spacing: 0;
+      pointer-events: none;
+    }
+
+    .table-center {
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.58);
+    }
+
+    .pot {
+      min-width: 110px;
+      padding: 7px 14px;
+      border: 0;
+      border-radius: 6px;
+      background:
+        linear-gradient(180deg, rgba(61, 66, 70, 0.95), rgba(29, 31, 34, 0.95));
+      color: #f7f1df;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 8px 18px rgba(0, 0, 0, 0.42);
+    }
+
+    .pot::before {
+      content: "";
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      margin-right: 7px;
+      vertical-align: -4px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, #f5f0de 0 18%, transparent 19%),
+        conic-gradient(#e7f3ff 0 12%, #10a8e4 12% 24%, #e7f3ff 24% 36%, #10a8e4 36% 48%, #e7f3ff 48% 60%, #10a8e4 60% 72%, #e7f3ff 72% 84%, #10a8e4 84% 100%);
+      box-shadow:
+        inset 0 0 0 3px #0584bd,
+        0 2px 4px rgba(0, 0, 0, 0.45);
+    }
+
+    .current-game,
+    .dealer-options-line,
+    .round-info {
+      color: rgba(244, 240, 232, 0.86);
+    }
+
+    .seat {
+      width: clamp(122px, 14vw, 152px);
+      min-height: 112px;
+      padding: 14px 8px 8px;
+      gap: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 7px;
+      background:
+        linear-gradient(180deg, rgba(78, 80, 82, 0.95), rgba(32, 34, 37, 0.98));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 13px 22px rgba(0, 0, 0, 0.5);
+    }
+
+    .seat:not(.empty)::after {
+      content: none;
+    }
+
+    .seat.you::after {
+      content: none;
+    }
+
+    .seat-name {
+      color: #f8f1df;
+      font-size: clamp(12px, 1.25vw, 14px);
+      text-shadow: 0 2px 3px rgba(0, 0, 0, 0.62);
+    }
+
+    .stack {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      color: #ffe49d;
+      font-size: clamp(12px, 1.25vw, 14px);
+      text-shadow: 0 2px 3px rgba(0, 0, 0, 0.62);
+    }
+
+    .stack::before {
+      content: "";
+      width: 18px;
+      height: 16px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 42%, #f5f2dc 0 18%, transparent 19%),
+        conic-gradient(#f4e4ff 0 12%, #7659d6 12% 24%, #f4e4ff 24% 36%, #7659d6 36% 48%, #f4e4ff 48% 60%, #7659d6 60% 72%, #f4e4ff 72% 84%, #7659d6 84% 100%);
+      box-shadow:
+        inset 0 0 0 3px #6147bf,
+        0 -4px 0 -2px #8b73e2,
+        0 -8px 0 -4px #6147bf,
+        0 2px 5px rgba(0, 0, 0, 0.52);
+    }
+
+    .seat::before {
+      z-index: 8;
+      top: -34px;
+      min-width: 48px;
+      min-height: 27px;
+      border-radius: 999px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255, 244, 226, 0.42) 0 18%, transparent 19%),
+        conic-gradient(#f7ecec 0 10%, #d94848 10% 20%, #f7ecec 20% 30%, #d94848 30% 40%, #f7ecec 40% 50%, #d94848 50% 60%, #f7ecec 60% 70%, #d94848 70% 80%, #f7ecec 80% 90%, #d94848 90% 100%);
+      border: 3px solid #f7efe2;
+      box-shadow:
+        inset 0 0 0 4px #b92935,
+        0 2px 0 #8e1d28,
+        0 5px 10px rgba(0, 0, 0, 0.45);
+    }
+
+    .seat.you,
+    .seat.dealer {
+      border-color: rgba(235, 210, 134, 0.92);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 0 0 3px rgba(235, 210, 134, 0.28),
+        0 15px 26px rgba(0, 0, 0, 0.54);
+    }
+
+    .seat.active {
+      outline: 0;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0 0 3px rgba(50, 226, 96, 0.9),
+        0 0 22px rgba(50, 226, 96, 0.48),
+        0 15px 28px rgba(0, 0, 0, 0.55);
+    }
+
+    .seat-status {
+      color: #61c4ff;
+      font-size: 10px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    }
+
+    .dealer-button {
+      background:
+        radial-gradient(circle at 38% 28%, #fff 0 14%, #f9f7eb 15% 52%, #d8cfad 53% 100%);
+      border: 4px solid #f8f0d4;
+      color: #151515;
+      box-shadow:
+        inset 0 0 0 3px rgba(0, 0, 0, 0.12),
+        0 5px 10px rgba(0, 0, 0, 0.45);
+    }
+
+    .player-actions {
+      gap: 8px;
+    }
+
+    .player-actions button,
+    .dealer-panel button,
+    .tool-button,
+    .seating-actions button,
+    .seat-picker button {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 5px;
+      background:
+        linear-gradient(180deg, #f06b2c, #b93015 70%, #92210f);
+      color: #fff6e4;
+      font-weight: 900;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 5px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .player-actions button:not(.danger):nth-child(2),
+    .player-actions button:not(.danger):nth-child(3) {
+      background:
+        linear-gradient(180deg, #ff7c31, #d74418 70%, #a92a10);
+    }
+
+    .player-actions .danger {
+      background:
+        linear-gradient(180deg, #f26b37, #ce3518 70%, #961e12);
+    }
+
+    .player-actions button:disabled,
+    .dealer-panel button:disabled,
+    .tool-button:disabled {
+      filter: grayscale(0.7);
+      opacity: 0.56;
+    }
+
+    /* Clean table corrections: no avatars/chip clutter, clear action dock */
+    .seat:not(.empty)::after,
+    .seat.you::after {
+      content: none;
+      display: none;
+    }
+
+    .stack::before,
+    .pot::before {
+      content: none;
+      display: none;
+    }
+
+    .seat {
+      padding-top: 14px;
+      min-height: 112px;
+    }
+
+    .seat::before {
+      top: -20px;
+      min-width: 42px;
+      max-width: 132px;
+      min-height: 22px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--chip);
+      border: 3px solid #f4f0e8;
+      box-shadow: 0 0 0 3px #aa2f39;
+      z-index: 12;
+    }
+
+    .player-actions.visible {
+      position: fixed;
+      left: var(--action-dock-left, calc(50% + 140px));
+      top: var(--action-dock-top, auto);
+      right: auto;
+      bottom: auto;
+      width: min(300px, calc(100vw - 32px));
+      z-index: 120;
+      grid-template-columns: repeat(2, minmax(112px, 1fr));
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(13, 15, 18, 0.92);
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.46);
+    }
+
+    .player-actions.single-action.visible {
+      width: min(190px, calc(100vw - 32px));
+      grid-template-columns: 1fr;
+    }
+
+    .player-actions button {
+      min-height: 46px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        place-items: start center;
+      }
+
+      .app {
+        padding-bottom: 96px;
+      }
+
+      .table {
+        border-width: 20px;
+      }
+
+      .seat {
+        width: clamp(92px, 28vw, 116px);
+        min-height: 92px;
+        padding-top: 10px;
+      }
+
+      .seat:not(.empty)::after {
+        content: none;
+      }
+
+      .seat::before {
+        top: -22px;
+        min-height: 22px;
+      }
+
+      .stack::before {
+        content: none;
+        display: none;
+      }
+
+      .player-actions.visible {
+        position: fixed;
+        left: max(10px, env(safe-area-inset-left));
+        right: max(10px, env(safe-area-inset-right));
+        bottom: max(10px, env(safe-area-inset-bottom));
+        z-index: 100;
+        width: auto;
+        max-width: none;
+        grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+        padding: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 8px;
+        background: rgba(18, 20, 23, 0.92);
+        box-shadow: 0 -10px 26px rgba(0, 0, 0, 0.46);
+        backdrop-filter: blur(6px);
+      }
+
+      .player-actions.single-action.visible {
+        grid-template-columns: minmax(160px, 1fr);
+      }
+
+      .player-actions button {
+        min-height: 48px;
+        font-size: 15px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -3616,6 +3967,33 @@
       readyActions.classList.remove("visible");
     }
 
+    function visibleActionPanel() {
+      return document.querySelector(".player-actions.visible");
+    }
+
+    function positionActionDock() {
+      const panel = visibleActionPanel();
+      if (!panel || window.matchMedia("(max-width: 720px)").matches || !seats[userSeatIndex]) {
+        return;
+      }
+
+      const seatRect = seats[userSeatIndex].getBoundingClientRect();
+      const panelWidth = panel.classList.contains("single-action") ? 190 : 300;
+      const panelHeight = Math.max(panel.offsetHeight || 90, 54);
+      const margin = 12;
+      let left = seatRect.right + margin;
+      if (left + panelWidth > window.innerWidth - margin) {
+        left = Math.max(margin, seatRect.left - panelWidth - margin);
+      }
+      let top = seatRect.top + Math.round(seatRect.height * 0.56);
+      if (top + panelHeight > window.innerHeight - margin) {
+        top = Math.max(margin, seatRect.bottom - panelHeight);
+      }
+
+      document.documentElement.style.setProperty("--action-dock-left", `${Math.round(left)}px`);
+      document.documentElement.style.setProperty("--action-dock-top", `${Math.round(top)}px`);
+    }
+
     function beginReadyUpPhase(nextDealer = nextOccupiedIndex(dealerIndex)) {
       hideActionPanels();
       activeIndex = userSeatIndex;
@@ -5724,6 +6102,8 @@
       if (canShowBlackMariah(activeIndex)) {
         mariahShowActions.classList.add("visible");
       }
+
+      requestAnimationFrame(positionActionDock);
     }
 
     function payToCall(index) {
@@ -9746,6 +10126,7 @@
 
     nextActionButton.addEventListener("click", runSteppedAction);
     endB52Test.addEventListener("click", endB52ForTesting);
+    window.addEventListener("resize", positionActionDock);
 
     seats.forEach((seat, index) => {
       seat.addEventListener("pointerdown", (event) => {
