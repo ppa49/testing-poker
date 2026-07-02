@@ -1101,6 +1101,20 @@
       transform: rotate(4deg);
     }
 
+    .seat.you.folded .hand {
+      cursor: zoom-in;
+    }
+
+    .seat.you.folded.peek-folded .hand {
+      cursor: zoom-out;
+    }
+
+    .player-card.folded-peek-card {
+      box-shadow:
+        0 0 0 2px rgba(216, 182, 95, 0.24),
+        0 4px 10px rgba(0, 0, 0, 0.26);
+    }
+
     .card-corner {
       display: grid;
       justify-items: center;
@@ -2432,6 +2446,7 @@
     let selectedRollCardIndex = null;
     let selectedPigCards = new Set();
     let selectedDeclareChoice = null;
+    let foldedPeekSeatIndex = null;
     let userSeatIndex = 4;
     let occupiedSeats = seats.map((_, index) => (
       index >= 2 && index <= 6
@@ -4516,6 +4531,11 @@
         return;
       }
 
+      if (handState.folded?.[seatIndex]) {
+        muckCards(seatIndex);
+        return;
+      }
+
       const cardEntries = handState.hands[seatIndex]
         .map((sampleCard, cardIndex) => ({ sampleCard, cardIndex }))
         .filter((entry) => handState.phase === "rolling" || !isVisuallyDiscardedCard(seatIndex, entry.cardIndex));
@@ -5767,15 +5787,45 @@
     function muckCards(index) {
       const hand = seats[index].querySelector(".hand");
       const cardCount = handState.hands[index]?.length || hand.children.length;
+      const canPeek = canPeekFoldedCards(index);
+      const isPeeking = canPeek && foldedPeekSeatIndex === index;
       hand.innerHTML = "";
       seats[index].querySelector(".discard-pile")?.remove();
+      seats[index].classList.toggle("peek-folded", isPeeking);
+
+      if (isPeeking) {
+        handState.hands[index].forEach((sampleCard) => {
+          const card = document.createElement("div");
+          card.className = "player-card folded-peek-card";
+          buildCardFace(card, sampleCard, handState.rules);
+          hand.appendChild(card);
+        });
+        return;
+      }
 
       for (let count = 0; count < cardCount; count += 1) {
         const card = document.createElement("div");
         card.className = "player-card mucked-card";
-        card.setAttribute("aria-label", "mucked card");
+        card.setAttribute("aria-label", canPeek ? "hold to peek folded card" : "mucked card");
         hand.appendChild(card);
       }
+    }
+
+    function canPeekFoldedCards(index) {
+      return Boolean(
+        handState
+        && handState.folded?.[index]
+        && isUserSeat(index)
+        && handState.hands?.[index]?.length
+      );
+    }
+
+    function setFoldedPeek(index, enabled) {
+      if (!canPeekFoldedCards(index)) {
+        return;
+      }
+      foldedPeekSeatIndex = enabled ? index : null;
+      muckCards(index);
     }
 
     function stayPlayer(index) {
@@ -9051,13 +9101,14 @@
       updateStepControls();
       activeIndex = null;
       selectedRollCardIndex = null;
+      foldedPeekSeatIndex = null;
       rollButton.disabled = true;
       handState = null;
       setSeatingLocked(false);
       pot = 0;
       updatePot();
       seats.forEach((seat) => {
-        seat.classList.remove("folded");
+        seat.classList.remove("folded", "peek-folded");
         seat.dataset.points = "";
         seat.querySelector(".hand").innerHTML = "";
         seat.querySelector(".discard-pile")?.remove();
@@ -9689,6 +9740,32 @@
 
     nextActionButton.addEventListener("click", runSteppedAction);
     endB52Test.addEventListener("click", endB52ForTesting);
+
+    seats.forEach((seat, index) => {
+      seat.addEventListener("pointerdown", (event) => {
+        if (!event.target.closest(".hand") || !canPeekFoldedCards(index)) {
+          return;
+        }
+        event.preventDefault();
+        seat.setPointerCapture?.(event.pointerId);
+        setFoldedPeek(index, true);
+      });
+      seat.addEventListener("pointerup", () => {
+        if (foldedPeekSeatIndex === index) {
+          setFoldedPeek(index, false);
+        }
+      });
+      seat.addEventListener("pointercancel", () => {
+        if (foldedPeekSeatIndex === index) {
+          setFoldedPeek(index, false);
+        }
+      });
+      seat.addEventListener("pointerleave", () => {
+        if (foldedPeekSeatIndex === index) {
+          setFoldedPeek(index, false);
+        }
+      });
+    });
 
     randomSeatButton.addEventListener("click", randomOpenSeat);
     addBotSeatButton.addEventListener("click", addBotSeat);
