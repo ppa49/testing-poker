@@ -1068,6 +1068,11 @@
         0 7px 12px rgba(0, 0, 0, 0.28);
     }
 
+    .player-card.up-card.sideways-card {
+      transform: translateY(-10px) rotate(90deg);
+      margin: 0 8px;
+    }
+
     .player-card.roll-selectable {
       cursor: pointer;
       transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
@@ -1218,6 +1223,10 @@
 
       .player-card.up-card {
         transform: translateY(-7px);
+      }
+
+      .player-card.up-card.sideways-card {
+        transform: translateY(-7px) rotate(90deg);
       }
 
       .table-center {
@@ -5200,7 +5209,8 @@
     }
 
     function bingoRemainingTotals(index) {
-      const liveCards = handState.hands[index].filter((_, cardIndex) => !handState.upCards[index].has(cardIndex));
+      const matchedCards = bingoMatchedCards(index);
+      const liveCards = handState.hands[index].filter((_, cardIndex) => !matchedCards.has(cardIndex));
       const totals = liveCards.reduce((runningTotals, card) => {
         const values = bingoCardValueOptions(card);
         return runningTotals.flatMap((total) => values.map((value) => total + value));
@@ -5214,7 +5224,17 @@
     }
 
     function hasBingo(index) {
-      return handState.hands[index].length > 0 && handState.upCards[index].size >= handState.hands[index].length;
+      return handState.hands[index].length > 0 && bingoMatchedCards(index).size >= handState.hands[index].length;
+    }
+
+    function bingoMatchedCards(index) {
+      return handState?.bingoMatchedCards?.[index] || handState?.upCards?.[index] || new Set();
+    }
+
+    function ensureBingoMatchedCards() {
+      if (!handState.bingoMatchedCards) {
+        handState.bingoMatchedCards = seats.map((_, index) => new Set(handState.upCards[index] || []));
+      }
     }
 
     function bingoFaceValue(card) {
@@ -5255,6 +5275,7 @@
     }
 
     function revealBingoIndexes(indexes) {
+      ensureBingoMatchedCards();
       indexes.forEach((cardIndex) => {
         replaceBingoRepeat(cardIndex);
         const boardCard = handState.communityCards[cardIndex];
@@ -5263,6 +5284,7 @@
           handState.hands[seatIndex].forEach((card, playerCardIndex) => {
             if (card.rank === boardCard.rank) {
               handState.upCards[seatIndex].add(playerCardIndex);
+              handState.bingoMatchedCards[seatIndex].add(playerCardIndex);
             }
           });
           renderSeatHand(seatIndex);
@@ -6961,6 +6983,7 @@
 
     function finishBingoShowdown() {
       clearSeatStatus();
+      ensureBingoMatchedCards();
       revealAllCards();
       renderCommunityCards();
 
@@ -7630,7 +7653,7 @@
     }
 
     function updateFollowWildFromUpCard(card) {
-      if (handState.rules.kind !== "followQueen") return;
+      if (!isFollowQueenRules()) return;
 
       if (card.rank === "Q") {
         const hadFollowWild = Boolean(handState.followWildRank);
@@ -7655,7 +7678,7 @@
     }
 
     function clearUnresolvedFollow() {
-      if (handState?.rules?.kind === "followQueen" && handState.waitingForFollowCard) {
+      if (isFollowQueenRules() && handState.waitingForFollowCard) {
         const hadFollowWild = Boolean(handState.followWildRank);
         handState.followWildRank = null;
         handState.waitingForFollowCard = false;
@@ -7684,7 +7707,7 @@
     }
 
     function dealMariahRound(reason) {
-      for (const index of activePlayerIndexes()) {
+      for (const index of clockwiseActiveIndexesFromDealer()) {
         if (isStudFollowGame()) {
           const result = dealMariahUpCardTo(index);
           if (result === "reset") {
@@ -7820,10 +7843,29 @@
       return scored.filter((entry) => entry.score === best).map((entry) => entry.index);
     }
 
+    function isFollowQueenRules() {
+      return Boolean(
+        handState
+        && (
+          handState.rules?.kind === "followQueen"
+          || handState.rulesName === "Queens and Follows"
+          || handState.rulesName === "Follow the Bitch"
+        )
+      );
+    }
+
+    function isQueenAlwaysWildGame() {
+      return Boolean(
+        handState?.rules?.queenWild
+        || handState?.rulesName === "Queens and Follows"
+        || handState?.rules?.name === "Queens and Follows"
+      );
+    }
+
     function studWildRanks() {
-      if (!handState || handState.rules.kind !== "followQueen") return new Set();
+      if (!isFollowQueenRules()) return new Set();
       const ranks = new Set();
-      if (handState.rules.queenWild) {
+      if (isQueenAlwaysWildGame()) {
         ranks.add("Q");
       }
       if (handState.followWildRank) {
@@ -7834,6 +7876,27 @@
 
     function isStudWildCard(card) {
       return studWildRanks().has(card.rank);
+    }
+
+    function clockwiseActiveIndexesFromDealer() {
+      const ordered = [];
+      for (let offset = 1; offset <= seats.length; offset += 1) {
+        const index = (dealerIndex + offset) % seats.length;
+        if (isOccupied(index) && !handState.folded[index]) {
+          ordered.push(index);
+        }
+      }
+      return ordered;
+    }
+
+    function processOpeningFollowWilds() {
+      if (!isFollowQueenRules()) return;
+      handState.followWildRank = null;
+      handState.waitingForFollowCard = false;
+      clockwiseActiveIndexesFromDealer().forEach((index) => {
+        publicMariahCards(index).forEach(updateFollowWildFromUpCard);
+      });
+      clearUnresolvedFollow();
     }
 
     function studHighScore(index) {
@@ -9193,6 +9256,7 @@
           bingoRound: 0,
           bingoBets: bingoBetInputs.map((input) => Math.max(1, Number(input.value) || 1)),
           shotgunBets: shotgunBetInputs.map((input) => Math.max(1, Number(input.value) || 1)),
+          bingoMatchedCards: seats.map(() => new Set()),
           cincinnatiRound: 0,
           cincinnatiBets: cincinnatiBetInputs.map((input) => Math.max(1, Number(input.value) || 1)),
           cincinnatiSplitIndex: Math.max(0, Number(cincinnatiSplitCard.value) - 1),
@@ -9315,9 +9379,7 @@
           }
         } else if (rules.kind === "followQueen") {
           handState.mariahRound = 1;
-          activePlayerIndexes().forEach((index) => {
-            publicMariahCards(index).forEach(updateFollowWildFromUpCard);
-          });
+          processOpeningFollowWilds();
           renderAllHands();
           startMariahBettingRound("Opening deal complete", false);
         } else if (rules.kind === "night") {
